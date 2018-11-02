@@ -8,5 +8,5 @@ skipDirs      = @["tests"]
 requires: "nim >= 0.19.0"
 
 task test, "Run all tests":
-  exec "nim c tests/test"
-  exec "nim c -d:release tests/test"
+  exec "nim c --passL:\"-lsnappy -L./tests -lstdc++\" -r tests/test"
+  exec "nim c --passL:\"-lsnappy -L./tests -lstdc++\" -d:release -r tests/test"
