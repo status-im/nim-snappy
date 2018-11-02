@@ -452,7 +452,7 @@ const
 # Otherwise, a newly allocated slice will be returned.
 #
 # The dst and src must not overlap. It is valid to pass a nil dst.
-proc encode*(src: openArray[byte]): seq[byte] =
+func encode*(src: openArray[byte]): seq[byte] =
   let n = maxEncodedLen(src.len)
   if n == 0: return
   var dst = newSeq[byte](n)
@@ -483,7 +483,7 @@ proc encode*(src: openArray[byte]): seq[byte] =
 
 # decodedLen returns the length of the decoded block and the number of bytes
 # that the length header occupied.
-proc decode*(src: openArray[byte]): seq[byte] =
+func decode*(src: openArray[byte]): seq[byte] =
   let (len, bytesRead) = uvarint(src)
   if bytesRead <= 0 or len > 0xffffffff'u64:
     return
@@ -496,3 +496,9 @@ proc decode*(src: openArray[byte]): seq[byte] =
     result = newSeq[byte](len)
     let errCode = decode(result, src[bytesRead..^1])
     if errCode != 0: result = @[]
+
+template compress*(src: openArray[byte]): seq[byte] =
+  snappy.encode(src)
+
+template uncompress*(src: openArray[byte]): seq[byte] =
+  snappy.decode(src)

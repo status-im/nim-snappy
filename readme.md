@@ -12,6 +12,8 @@ no stream compression support at all.
 ## API
 * proc encode*(src: openArray[byte]): seq[byte]
 * proc decode*(src: openArray[byte]): seq[byte]
+* template compress --- an alias to encode
+* template uncompress --- an alias to decode
 
 ## Examples
 ```Nim
