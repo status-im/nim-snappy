@@ -40,7 +40,7 @@ script:
   - mkdir build
   - cd build && cmake ../ && make
   - cd ../..
-  - cp snappy/build/libsnappy.a tests/libsnappy.a
+  - "cp snappy/build/libsnappy.a $TRAVIS_BUILD_DIR/tests/libsnappy.a"
 
   - nimble install -y > /dev/null
   - nimble test
