@@ -2,10 +2,6 @@ import
   snappy, os, unittest,
   terminal, strutils, randgen
 
-{.passL: "-lsnappy".}
-{.passL: "-L.".}
-{.passL: "-lstdc++".}
-
 proc snappy_compress(input: cstring, input_length: csize, compressed: cstring, compressed_length: var csize): cint {.importc, cdecl.}
 proc snappy_uncompress(compressed: cstring, compressed_length: csize, uncompressed: cstring, uncompressed_length: var csize): cint {.importc, cdecl.}
 proc snappy_max_compressed_length(source_length: csize): csize {.importc, cdecl.}
@@ -100,22 +96,23 @@ template toBytes(s: string): auto =
   toOpenArrayByte(s, 0, s.len-1)
 
 suite "snappy":
+  let dataDir = getAppDir() & DirSep & testDataDir
   test "basic roundtrip test":
     check roundTrip("empty", empty)
     check roundTrip("oneZero", oneZero)
-    check roundTrip("data_html",    testDataDir & "html")
-    check roundTrip("data_urls",    testDataDir & "urls.10K")
-    check roundTrip("data_jpg",     testDataDir & "fireworks.jpeg")
-    check roundTrip("data_pdf",     testDataDir & "paper-100k.pdf")
-    check roundTrip("data_html4",   testDataDir & "html_x_4")
-    check roundTrip("data_txt1",    testDataDir & "alice29.txt")
-    check roundTrip("data_txt2",    testDataDir & "asyoulik.txt")
-    check roundTrip("data_txt3",    testDataDir & "lcet10.txt")
-    check roundTrip("data_txt4",    testDataDir & "plrabn12.txt")
-    check roundTrip("data_pb",      testDataDir & "geo.protodata")
-    check roundTrip("data_gaviota", testDataDir & "kppkn.gtb")
-    check roundTrip("data_golden",  testDataDir & "Mark.Twain-Tom.Sawyer.txt")
-    check roundTripRev("data_golden_rev", testDataDir & "Mark.Twain-Tom.Sawyer.txt.rawsnappy")
+    check roundTrip("data_html",    dataDir & "html")
+    check roundTrip("data_urls",    dataDir & "urls.10K")
+    check roundTrip("data_jpg",     dataDir & "fireworks.jpeg")
+    check roundTrip("data_pdf",     dataDir & "paper-100k.pdf")
+    check roundTrip("data_html4",   dataDir & "html_x_4")
+    check roundTrip("data_txt1",    dataDir & "alice29.txt")
+    check roundTrip("data_txt2",    dataDir & "asyoulik.txt")
+    check roundTrip("data_txt3",    dataDir & "lcet10.txt")
+    check roundTrip("data_txt4",    dataDir & "plrabn12.txt")
+    check roundTrip("data_pb",      dataDir & "geo.protodata")
+    check roundTrip("data_gaviota", dataDir & "kppkn.gtb")
+    check roundTrip("data_golden",  dataDir & "Mark.Twain-Tom.Sawyer.txt")
+    check roundTripRev("data_golden_rev", dataDir & "Mark.Twain-Tom.Sawyer.txt.rawsnappy")
 
   test "misc test":
     for i in 1..32:
