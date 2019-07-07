@@ -1,6 +1,27 @@
 import
-  snappy, os, unittest,
-  terminal, strutils, randgen
+  os, unittest, terminal, strutils,
+  snappy, randgen, ./openarrays_snappy
+
+include system/timers
+
+type
+  TestTimes = object
+    fastStreams: Nanos
+    openArrays: Nanos
+    nimStreams: Nanos
+    cppLib: Nanos
+
+template timeit(timerVar: var Nanos, code: untyped): auto =
+  let t0 = getTicks()
+  let res = code
+  let timerVar = int(getTicks() - t0)
+  res
+
+proc printTimes(t: TestTimes): string =
+  styledEcho "  cpu time [FastStream]: ", styleBright, t.fastStreams
+  styledEcho "  cpu time [OpenArrays]: ", styleBright, t.openArrays
+  styledEcho "  cpu time [NimStreams]: ", styleBright, t.nimStreams
+  styledEcho "  cpu time [C++ Snappy]: ", styleBright, t.cppLib
 
 proc snappy_compress(input: cstring, input_length: csize, compressed: cstring, compressed_length: var csize): cint {.importc, cdecl.}
 proc snappy_uncompress(compressed: cstring, compressed_length: csize, uncompressed: cstring, uncompressed_length: var csize): cint {.importc, cdecl.}
@@ -22,23 +43,30 @@ proc readSource(sourceName: string): seq[byte] =
   doAssert(size == f.readBytes(result, 0, size))
   f.close()
 
-proc roundTrip(msg: string, source: openArray[byte]): bool =
+proc timedRoundTrip(msg: string, source: openarray[byte]): (bool, TestTimes) =
   var
-    encoded = snappy.encode(source)
+    encoded  = timeit(result[1].openArrays): openarrays_snappy.encode(source)
+    encoded2 = timeit(result[1].fastStreams): snappy.encode(source)
     cpp_encoded = newString(snappy_max_compressed_length(source.len.csize))
     output_size: csize = cpp_encoded.len
     success: cint = 0
 
-  if source.len > 0:
-    success = snappy_compress(cast[cstring](source[0].unsafeAddr), source.len.csize, cpp_encoded[0].addr, output_size)
-  else:
-    success = snappy_compress(cast[cstring](0), source.len.csize, cpp_encoded[0].addr, output_size)
+  success = timeit(result[1].cppLib):
+    if source.len > 0:
+      snappy_compress(cast[cstring](source[0].unsafeAddr), source.len.csize, cpp_encoded[0].addr, output_size)
+    else:
+      snappy_compress(cast[cstring](0), source.len.csize, cpp_encoded[0].addr, output_size)
 
   var ok = success == 0
   if not ok: echo "cpp_compress failed"
 
   ok = output_size == encoded.len
   if not ok: echo "cpp output size and nim output size differ"
+
+  if ok:
+    ok = encoded == encoded2
+    if not ok:
+      echo "OpenArray and FastStream implementations disagree"
 
   if ok:
     ok = equalMem(encoded[0].addr, cpp_encoded[0].addr, output_size.int)
@@ -53,7 +81,10 @@ proc roundTrip(msg: string, source: openArray[byte]): bool =
   else:
     stdout.styledWriteLine("  ", msg, "...", fgRed, "[FAILED]")
 
-  result = ok
+  result[0] = ok
+
+proc roundTrip(msg: string, source: openArray[byte]): bool =
+  timedRoundTrip(msg, source)[0]
 
 proc roundTrip(msg: string, sourceName: string): bool =
   var src = readSource(sourceName)
@@ -96,7 +127,19 @@ template toBytes(s: string): auto =
   toOpenArrayByte(s, 0, s.len-1)
 
 suite "snappy":
-  let dataDir = getAppDir() & DirSep & testDataDir
+  let
+    dataDir = getAppDir() & DirSep & testDataDir
+    largeFile = dataDir / "largefile.bin"
+
+  if fileExists(largeFile):
+    test "test large file performance":
+      let (success, times) = roundTrip("empty", largeFile)
+      printTimes times
+      check success and times.fastStreams < times.openArrays * 1.1
+
+  if true:
+    quit 0
+
   test "basic roundtrip test":
     check roundTrip("empty", empty)
     check roundTrip("oneZero", oneZero)

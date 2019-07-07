@@ -5,7 +5,8 @@ description   = "Nim implementation of snappy compression algorithm"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires: "nim >= 0.19.0"
+requires: "nim >= 0.19.0",
+          "faststreams"
 
 task test, "Run all tests":
   exec "nim c --passL:\"-lsnappy -L./tests -lstdc++\" -r tests/test"
