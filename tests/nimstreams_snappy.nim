@@ -1,5 +1,5 @@
 import
-  faststreams/output_stream
+  streams
 
 const
   tagLiteral* = 0x00
@@ -9,13 +9,20 @@ const
 
   inputMargin = 16 - 1
 
+proc writeByte(s: Stream, x: byte) {.inline.} =
+  s.writeData(unsafeAddr x, 1)
+
+proc writeBytes(s: Stream, bytes: openarray[byte]) {.inline.} =
+  let start = unsafeAddr bytes[0]
+  s.writeData(start, bytes.len)
+
 # PutUvarint encodes a uint64 into buf and returns the number of bytes written.
-proc putUvarint(s: OutputStreamVar, x: uint64) =
+proc putUvarint(s: Stream, x: uint64) =
   var x = x
   while x >= 0x80'u64:
-    s.append byte(x and 0xFF) or 0x80
+    s.writeByte byte(x and 0xFF) or 0x80
     x = x shr 7
-  s.append byte(x and 0xFF)
+  s.writeByte byte(x and 0xFF)
 
 # Uvarint decodes a uint64 from buf and returns that value and the
 # number of bytes read (> 0). If an error occurred, the value is 0
@@ -72,27 +79,27 @@ func load64(b: openArray[byte], i: int): uint64 =
 #
 # It assumes that:
 #  1 <= len(lit) and len(lit) <= 65536
-proc emitLiteral(s: OutputStreamVar, lit: openarray[byte]) =
+proc emitLiteral(s: Stream, lit: openarray[byte]) =
   let n = lit.len - 1
 
   if n < 60:
-    s.append (byte(n) shl 2) or tagLiteral
+    s.writeByte (byte(n) shl 2) or tagLiteral
   elif n < (1 shl 8):
-    s.append (60 shl 2) or tagLiteral
-    s.append byte(n)
+    s.writeByte (60 shl 2) or tagLiteral
+    s.writeByte byte(n)
   else:
-    s.append (61 shl 2) or tagLiteral
-    s.append byte(n)
-    s.append byte(n shr 8)
+    s.writeByte (61 shl 2) or tagLiteral
+    s.writeByte byte(n)
+    s.writeByte byte(n shr 8)
 
-  s.append lit
+  s.writeBytes lit
 
 # emitCopy writes a copy chunk.
 #
 # It assumes that:
 #  1 <= offset and offset <= 65535
 #  4 <= length and length <= 65535
-proc emitCopy(s: OutputStreamVar, offset, length: int) =
+proc emitCopy(s: Stream, offset, length: int) =
   var length = length
   # The maximum length for a single tagCopy1 or tagCopy2 op is 64 bytes. The
   # threshold for this loop is a little higher (at 68 = 64 + 4), and the
@@ -105,28 +112,28 @@ proc emitCopy(s: OutputStreamVar, offset, length: int) =
   # encodes-as-3-bytes tagCopy2 instead of an encodes-as-2-bytes tagCopy1.
   while length >= 68:
     # Emit a length 64 copy, encoded as 3 bytes.
-    s.append (63 shl 2) or tagCopy2
-    s.append byte(offset)
-    s.append byte(offset shr 8)
+    s.writeByte (63 shl 2) or tagCopy2
+    s.writeByte byte(offset)
+    s.writeByte byte(offset shr 8)
     dec(length, 64)
 
   if length > 64:
     # Emit a length 60 copy, encoded as 3 bytes.
-    s.append (59 shl 2) or tagCopy2
-    s.append byte(offset)
-    s.append byte(offset shr 8)
+    s.writeByte (59 shl 2) or tagCopy2
+    s.writeByte byte(offset)
+    s.writeByte byte(offset shr 8)
     dec(length, 60)
 
   if (length >= 12) or (offset >= 2048):
     # Emit the remaining copy, encoded as 3 bytes.
-    s.append (byte(length-1) shl 2) or tagCopy2
-    s.append byte(offset)
-    s.append byte(offset shr 8)
+    s.writeByte (byte(length-1) shl 2) or tagCopy2
+    s.writeByte byte(offset)
+    s.writeByte byte(offset shr 8)
     return
 
   # Emit the remaining copy, encoded as 2 bytes.
-  s.append (byte(offset shr 8) shl 5) or (byte(length-4) shl 2) or tagCopy1
-  s.append byte(offset)
+  s.writeByte (byte(offset shr 8) shl 5) or (byte(length-4) shl 2) or tagCopy1
+  s.writeByte byte(offset)
 
 when false:
   # extendMatch returns the largest k such that k <= len(src) and that
@@ -153,7 +160,7 @@ func hash(u, shift: uint32): uint32 =
 # It also assumes that:
 #  len(dst) >= MaxEncodedLen(len(src)) and
 #  minNonLiteralBlockSize <= len(src) and len(src) <= maxBlockSize
-proc encodeBlock(output: OutputStreamVar, src: openArray[byte]) =
+proc encodeBlock(output: Stream, src: openArray[byte]) =
   # Initialize the hash table. Its size ranges from 1shl8 to 1shl14 inclusive.
   # The table element type is uint16, as s < sLimit and sLimit < len(src)
   # and len(src) <= maxBlockSize and maxBlockSize == 65536.
@@ -431,7 +438,7 @@ const
 # Otherwise, a newly allocated slice will be returned.
 #
 # The dst and src must not overlap. It is valid to pass a nil dst.
-proc appendSnappyBytes*(s: OutputStreamVar, src: openArray[byte]) =
+proc appendSnappyBytes*(s: Stream, src: openArray[byte]) =
   let n = maxEncodedLen(src.len)
   if n == 0: return
 
@@ -455,32 +462,37 @@ proc appendSnappyBytes*(s: OutputStreamVar, src: openArray[byte]) =
     inc(p, blockSize)
     dec(len, blockSize)
 
-let SnappyStreamVTable = OutputStreamVTable(
-  writePage: proc (s: OutputStreamVar, data: openarray[byte])
-                  {.nimcall, gcsafe, raises: [IOError, Defect].} =
-    OutputStreamVar(s.outputDevice).encodeBlock data
-  ,
-  flush: proc (s: OutputStreamVar) {.nimcall, gcsafe.} =
-    OutputStreamVar(s.outputDevice).flush
-)
+proc appendSnappyBytes*(dst, src: Stream, srcLen: int) =
+  var blockData = newSeq[byte](maxBlockSize)
+  var len = srcLen
 
-proc initSnappyStream*(targetStream: OutputStreamVar): ref OutputStream =
-  new result
-  result.initWithSinglePage maxBlockSize, maxBlockSize
-  result.outputDevice = targetStream
-  result.vtable = unsafeAddr SnappyStreamVTable
+  dst.putUVarInt uint64(len)
+
+  while len > 0:
+    var blockSize = len
+    if blockSize > maxBlockSize:
+      blockSize = maxBlockSize
+
+    discard src.readData(addr blockData[0], blockSize)
+
+    if blockSize < minNonLiteralBlockSize:
+      dst.emitLiteral blockData[0..<blockSize]
+    else:
+      dst.encodeBlock blockData[0..<blockSize]
+
+    dec(len, blockSize)
+
+  dst.flush()
 
 # Encode returns the encoded form of src.
 proc encode*(src: openarray[byte]): seq[byte] =
   let n = maxEncodedLen(src.len)
   if n == 0: return
   result = newSeq[byte](n)
-  var outputStream = OutputStream.init(addr result[0], result.len)
-  outputStream.putUVarInt uint64(src.len)
-  var snappyStream = initSnappyStream(outputStream)
-  snappyStream.append src
-  snappyStream.flush
-  result.setLen outputStream.pos
+  var outputStream = newStringStream()
+  outputStream.data = newStringOfCap(n)
+  outputStream.appendSnappyBytes src
+  return cast[seq[byte]](outputStream.data)
 
 # decodedLen returns the length of the decoded block and the number of bytes
 # that the length header occupied.
@@ -503,3 +515,4 @@ template compress*(src: openArray[byte]): seq[byte] =
 
 template uncompress*(src: openArray[byte]): seq[byte] =
   snappy.decode(src)
+
