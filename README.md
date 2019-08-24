@@ -1,6 +1,6 @@
 # Snappy
-[![Build Status (Travis)](https://img.shields.io/travis/jangko/snappy/master.svg?label=Linux%20/%20macOS "Linux/macOS build status (Travis)")](https://travis-ci.org/jangko/snappy)
-[![Windows build status (Appveyor)](https://img.shields.io/appveyor/ci/jangko/snappy/master.svg?label=Windows "Windows build status (Appveyor)")](https://ci.appveyor.com/project/jangko/snappy)
+[![Build Status](https://travis-ci.org/status-im/nim-snappy.svg?branch=master)](https://travis-ci.org/status-im/nim-snappy)
+[![Build status](https://ci.appveyor.com/api/projects/status/g4y9874tx0biv3t1/branch/master?svg=true)](https://ci.appveyor.com/project/nimbus/nim-snappy/branch/master)
 ![nimble](https://img.shields.io/badge/available%20on-nimble-yellow.svg?style=flat-square)
 ![license](https://img.shields.io/github/license/citycide/cascade.svg?style=flat-square)
 
