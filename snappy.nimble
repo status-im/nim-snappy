@@ -1,3 +1,5 @@
+mode = ScriptMode.Verbose
+
 packageName   = "snappy"
 version       = "0.1.0"
 author        = "Andri Lim"
