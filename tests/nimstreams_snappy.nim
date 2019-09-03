@@ -89,8 +89,8 @@ proc emitLiteral(s: Stream, lit: openarray[byte]) =
     s.writeByte byte(n)
   else:
     s.writeByte (61 shl 2) or tagLiteral
-    s.writeByte byte(n)
-    s.writeByte byte(n shr 8)
+    s.writeByte byte(n and 0xFF)
+    s.writeByte byte((n shr 8) and 0xFF)
 
   s.writeBytes lit
 
@@ -113,27 +113,26 @@ proc emitCopy(s: Stream, offset, length: int) =
   while length >= 68:
     # Emit a length 64 copy, encoded as 3 bytes.
     s.writeByte (63 shl 2) or tagCopy2
-    s.writeByte byte(offset)
-    s.writeByte byte(offset shr 8)
+    s.writeByte byte(offset and 0xFF)
+    s.writeByte byte((offset shr 8) and 0xFF)
     dec(length, 64)
 
   if length > 64:
     # Emit a length 60 copy, encoded as 3 bytes.
     s.writeByte (59 shl 2) or tagCopy2
-    s.writeByte byte(offset)
-    s.writeByte byte(offset shr 8)
+    s.writeByte byte(offset and 0xFF)
+    s.writeByte byte((offset shr 8) and 0xFF)
     dec(length, 60)
 
   if (length >= 12) or (offset >= 2048):
     # Emit the remaining copy, encoded as 3 bytes.
-    s.writeByte (byte(length-1) shl 2) or tagCopy2
-    s.writeByte byte(offset)
-    s.writeByte byte(offset shr 8)
+    s.writeByte byte((((length-1) shl 2) or tagCopy2) and 0xFF)
+    s.writeByte byte(offset and 0xFF)
+    s.writeByte byte((offset shr 8) and 0xFF)
     return
 
-  # Emit the remaining copy, encoded as 2 bytes.
-  s.writeByte (byte(offset shr 8) shl 5) or (byte(length-4) shl 2) or tagCopy1
-  s.writeByte byte(offset)
+  s.writeByte byte((((offset shr 8) shl 5) or ((length-4) shl 2) or tagCopy1) and 0xFF)
+  s.writeByte byte(offset and 0xFF)
 
 when false:
   # extendMatch returns the largest k such that k <= len(src) and that

@@ -68,6 +68,7 @@ func load64(b: openArray[byte]): uint64 {.inline.} =
 func load64(b: openArray[byte], i: int): uint64 =
   result = load64(b[i..<i+8])
 
+import typetraits
 # emitLiteral writes a literal chunk.
 #
 # It assumes that:
@@ -79,11 +80,11 @@ proc emitLiteral(s: OutputStreamVar, lit: openarray[byte]) =
     s.append (byte(n) shl 2) or tagLiteral
   elif n < (1 shl 8):
     s.append (60 shl 2) or tagLiteral
-    s.append byte(n)
+    s.append byte(n and 0xFF)
   else:
     s.append (61 shl 2) or tagLiteral
-    s.append byte(n)
-    s.append byte(n shr 8)
+    s.append byte(n and 0xFF)
+    s.append byte((n shr 8) and 0xFF)
 
   s.append lit
 
@@ -106,27 +107,26 @@ proc emitCopy(s: OutputStreamVar, offset, length: int) =
   while length >= 68:
     # Emit a length 64 copy, encoded as 3 bytes.
     s.append (63 shl 2) or tagCopy2
-    s.append byte(offset)
-    s.append byte(offset shr 8)
+    s.append byte(offset and 0xFF)
+    s.append byte((offset shr 8) and 0xFF)
     dec(length, 64)
 
   if length > 64:
     # Emit a length 60 copy, encoded as 3 bytes.
     s.append (59 shl 2) or tagCopy2
-    s.append byte(offset)
-    s.append byte(offset shr 8)
+    s.append byte(offset and 0xFF)
+    s.append byte((offset shr 8) and 0xFF)
     dec(length, 60)
 
   if (length >= 12) or (offset >= 2048):
     # Emit the remaining copy, encoded as 3 bytes.
-    s.append (byte(length-1) shl 2) or tagCopy2
-    s.append byte(offset)
-    s.append byte(offset shr 8)
+    s.append byte((((length-1) shl 2) or tagCopy2) and 0xFF)
+    s.append byte(offset and 0xFF)
+    s.append byte((offset shr 8) and 0xFF)
     return
 
-  # Emit the remaining copy, encoded as 2 bytes.
-  s.append (byte(offset shr 8) shl 5) or (byte(length-4) shl 2) or tagCopy1
-  s.append byte(offset)
+  s.append byte((((offset shr 8) shl 5) or ((length-4) shl 2) or tagCopy1) and 0xFF)
+  s.append byte(offset and 0xFF)
 
 when false:
   # extendMatch returns the largest k such that k <= len(src) and that
