@@ -89,8 +89,8 @@ func emitLiteral(dst: var openArray[byte], lit: openArray[byte]): int =
     i = 2
   else:
     dst[0] = (61 shl 2) or tagLiteral
-    dst[1] = byte(n)
-    dst[2] = byte(n shr 8)
+    dst[1] = byte(n and 0xFF)
+    dst[2] = byte((n shr 8) and 0xFF)
     i = 3
 
   copyMem(dst[i].addr, lit[0].unsafeAddr, lit.len)
@@ -119,29 +119,29 @@ func emitCopy(dst: var openArray[byte], offset, length: int): int =
   while length >= 68:
     # Emit a length 64 copy, encoded as 3 bytes.
     dst[i+0] = (63 shl 2) or tagCopy2
-    dst[i+1] = byte(offset)
-    dst[i+2] = byte(offset shr 8)
+    dst[i+1] = byte(offset and 0xFF)
+    dst[i+2] = byte((offset shr 8) and 0xFF)
     inc(i, 3)
     dec(length, 64)
 
   if length > 64:
     # Emit a length 60 copy, encoded as 3 bytes.
     dst[i+0] = (59 shl 2) or tagCopy2
-    dst[i+1] = byte(offset)
-    dst[i+2] = byte(offset shr 8)
+    dst[i+1] = byte(offset and 0xFF)
+    dst[i+2] = byte((offset shr 8) and 0xFF)
     inc(i, 3)
     dec(length, 60)
 
   if (length >= 12) or (offset >= 2048):
     # Emit the remaining copy, encoded as 3 bytes.
     dst[i+0] = (byte(length-1) shl 2) or tagCopy2
-    dst[i+1] = byte(offset)
-    dst[i+2] = byte(offset shr 8)
+    dst[i+1] = byte(offset and 0xFF)
+    dst[i+2] = byte((offset shr 8) and 0xFF)
     return i + 3
 
   # Emit the remaining copy, encoded as 2 bytes.
-  dst[i+0] = (byte(offset shr 8) shl 5) or (byte(length-4) shl 2) or tagCopy1
-  dst[i+1] = byte(offset)
+  dst[i+0] = byte((((offset shr 8) shl 5) or ((length-4) shl 2) or tagCopy1) and 0xFF)
+  dst[i+1] = byte(offset and 0xFF)
   result = i + 2
 
 when false:

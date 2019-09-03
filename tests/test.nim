@@ -142,11 +142,12 @@ proc roundTripRev(msg: string, sourceName: string): bool =
 template toBytes(s: string): auto =
   toOpenArrayByte(s, 0, s.len-1)
 
-proc compressFileWithFaststreams(src, dst: string) =
-  var input = faststreams.openFile(src)
-  var output = OutputStream.init(dst)
-  output.appendSnappyBytes input.readBytes(input.endPos - 1)
-  output.flush()
+when false:
+  proc compressFileWithFaststreams(src, dst: string) =
+    var input = faststreams.openFile(src)
+    var output = OutputStream.init(dst)
+    output.appendSnappyBytes input.readBytes(input.endPos - 1)
+    output.flush()
 
 proc compressFileWithNimStreams(src, dst: string) =
   var input = newFileStream(src, fmRead)
