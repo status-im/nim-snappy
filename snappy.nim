@@ -68,7 +68,6 @@ func load64(b: openArray[byte]): uint64 {.inline.} =
 func load64(b: openArray[byte], i: int): uint64 =
   result = load64(b[i..<i+8])
 
-import typetraits
 # emitLiteral writes a literal chunk.
 #
 # It assumes that:
