@@ -10,8 +10,10 @@ template check_uncompress(source, target: string) =
 
     framing_format_uncompress(inStream, outStream)
 
-    var okResult = readFile(uncompDir & target)
-    if outStream.getOutput(string) != okResult:
+    let expected = readFile(uncompDir & target)
+    let actual = outStream.getOutput(string)
+
+    if actual != expected:
       check false
     else:
       check true
