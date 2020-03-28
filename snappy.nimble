@@ -8,7 +8,8 @@ license       = "MIT"
 skipDirs      = @["tests"]
 
 requires "nim >= 0.19.0",
-          "faststreams"
+         "faststreams",
+         "stew"
 
 task test, "Run all tests":
   exec "nim c --passL:\"-lsnappy -L./tests -lstdc++\" -r tests/test"
