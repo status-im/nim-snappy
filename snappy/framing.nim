@@ -1,28 +1,28 @@
 import
+  ../snappy,
   faststreams/[output_stream, input_stream],
   stew/endians2
 
-func maskedCrc32(data: openArray[byte]): uint32 =
-  const MASK_DELTA = 0xa282ead8'u32
-  const K = [0'u32, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190,
-    0x6b6b51f4, 0x4db26158, 0x5005713c, 0xedb88320'u32, 0xf00f9344'u32, 0xd6d6a3e8'u32,
-    0xcb61b38c'u32, 0x9b64c2b0'u32, 0x86d3d2d4'u32, 0xa00ae278'u32, 0xbdbdf21c'u32]
+{.compile: "crc32c.c".}
+# TODO: we don't have a native implementation of CRC32C algorithm yet.
+#       we can't use nimPNG CRC32
+proc masked_crc32c(buf: ptr byte, len: cuint): cuint {.cdecl, importc.}
 
-  var crc = not 0'u32
-  for b in data:
-    crc = (crc shr 4) xor K[int((crc and 0xF) xor (uint32(b) and 0xF'u32))]
-    crc = (crc shr 4) xor K[int((crc and 0xF) xor (uint32(b) shr 4'u32))]
-
-  crc = not crc
-  result = ((crc shr 15) or (crc shl 17)) + MASK_DELTA
-
-func checkCrc32(data, checksum: openArray[byte]): bool =
-  # data: uncompressed
-  # checksum: the first 4 bytes of chunk body
-  let
-    actual   = maskedCrc32(data)
-    expected = uint32.fromBytesLE(checksum)
+func checkCrc32(data: openArray[byte], expected: uint32): bool =
+  let actual = masked_crc32c(data[0].unsafeAddr, data.len.cuint)
   result = actual == expected
+
+proc checkData(data: openArray[byte], crc: uint32, output: OutputStreamVar): bool =
+  if not checkCrc32(data, crc):
+    echo "BAD CRC"
+    return
+
+  output.append(data)
+  result = true
+
+func seekForward(_: openArray[byte]) =
+  # TODO: rewindTo ?
+  discard
 
 const
   # maximum chunk data length
@@ -30,6 +30,51 @@ const
   # maximum uncompressed data length excluding checksum
   MAX_UNCOMPRESSED_DATA_LEN    = 65536
 
-  COMPRESSED_DATA_IDENTIFIER   = byte(0x00)
-  UNCOMPRESSED_DATA_IDENTIFIER = byte(0x01)
-  STREAM_IDENTIFIER            = byte(0xff)
+  COMPRESSED_DATA_IDENTIFIER   = 0x00
+  UNCOMPRESSED_DATA_IDENTIFIER = 0x01
+  STREAM_IDENTIFIER            = 0xff
+
+  STREAM_HEADER                = "\xff\x06\x00\x00sNaPpY"
+
+proc framing_format_uncompress*(input: ByteStreamVar, output: OutputStreamVar) =
+  if input[].ensureBytes(STREAM_HEADER.len):
+    if input.readBytes(STREAM_HEADER.len) != STREAM_HEADER.toOpenArrayByte(0, STREAM_HEADER.len-1):
+      return
+
+  var uncompressedData = newSeq[byte](MAX_UNCOMPRESSED_DATA_LEN)
+
+  while true:
+    if input[].eof():
+      break
+
+    # ensure bytes
+    let x = uint32.fromBytesLE(input.readBytes(4))
+    let id = x and 0xFF
+    let dataLen = (x shr 8).int
+
+    if id == COMPRESSED_DATA_IDENTIFIER:
+      let crc = uint32.fromBytesLE(input.readBytes(4))
+
+      let uncompressedLen = snappyUncompress(
+        input.readBytes(dataLen - 4),
+        uncompressedData
+      )
+
+      if uncompressedLen < 0:
+        return
+
+      if not checkData(uncompressedData.toOpenArray(0, uncompressedLen-1), crc, output):
+        return
+
+    elif id == UNCOMPRESSED_DATA_IDENTIFIER:
+      let crc = uint32.fromBytesLE(input.readBytes(4))
+      if not checkData(input.readBytes(dataLen - 4), crc, output):
+        return
+    elif id < 0x80:
+      # Reserved unskippable chunks (chunk types 0x02-0x7f)
+      # if we encounter this type of chunk, stop decoding
+      # the spec says it is an error
+      return
+    else:
+      # Reserved skippable chunks (chunk types 0x80-0xfe)
+      seekForward(input.readBytes(dataLen))

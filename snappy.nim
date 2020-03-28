@@ -463,6 +463,25 @@ func decode*(src: openArray[byte]): seq[byte] =
     let errCode = decode(result, src[bytesRead..^1])
     if errCode != 0: result = @[]
 
+proc snappyUncompress*(src: openArray[byte], dst: var openArray[byte]): int =
+  let (len, bytesRead) = uvarint(src)
+  if bytesRead <= 0 or len > 0xffffffff'u64:
+    return
+
+  const wordSize = sizeof(uint) * 8
+  if (wordSize == 32) and (len > 0x7fffffff'u64):
+    return
+
+  if dst.len < int(len):
+    return
+  
+  if int(len) > 0:
+    let errCode = decode(dst.toOpenArray(0, len.int-1), src[bytesRead..^1])
+    if errCode != 0:
+      return
+
+  result = int(len)
+
 template compress*(src: openArray[byte]): seq[byte] =
   snappy.encode(src)
 
