@@ -28,10 +28,10 @@ install:
   - env MAKE="mingw32-make -j2" ARCH_OVERRIDE=%PLATFORM% bash build_nim.sh Nim csources dist/nimble NimBinaries
   - SET PATH=%CD%\Nim\bin;%PATH%
 
-  - git clone --depth 1 https://github.com/google/snappy
+  - git clone --depth 1 https://github.com/google/snappy snappycpp
 
 build_script:
-  - cd snappy
+  - cd snappycpp
   - mkdir build
   - cd build
   - cmake .. -G "MinGW Makefiles" -DCMAKE_IGNORE_PATH="C:/Program Files/Git/usr/bin"
