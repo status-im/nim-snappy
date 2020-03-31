@@ -7,7 +7,7 @@ const
   inputMargin = 16 - 1
 
 # PutUvarint encodes a uint64 into buf and returns the number of bytes written.
-func putUvarint(buf: var openArray[byte], x: uint64): int =
+func putUvarint*(buf: var openArray[byte], x: uint64): int =
   var
     i = 0
     x = x
@@ -169,7 +169,7 @@ func hash(u, shift: uint32): uint32 =
 # It also assumes that:
 #  len(dst) >= MaxEncodedLen(len(src)) and
 #  minNonLiteralBlockSize <= len(src) and len(src) <= maxBlockSize
-func encodeBlock(dst, src: var openArray[byte]): int =
+func encodeBlock*(dst: var openArray[byte], src: openArray[byte]): int =
   # Initialize the hash table. Its size ranges from 1shl8 to 1shl14 inclusive.
   # The table element type is uint16, as s < sLimit and sLimit < len(src)
   # and len(src) <= maxBlockSize and maxBlockSize == 65536.
