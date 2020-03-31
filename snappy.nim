@@ -474,7 +474,7 @@ proc snappyUncompress*(src: openArray[byte], dst: var openArray[byte]): int =
 
   if dst.len < int(len):
     return
-  
+
   if int(len) > 0:
     let errCode = decode(dst.toOpenArray(0, len.int-1), src[bytesRead..^1])
     if errCode != 0:
