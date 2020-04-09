@@ -1,7 +1,6 @@
 import
   os, unittest, terminal, strutils, streams,
-  faststreams, snappy,
-  randgen, openarrays_snappy, nimstreams_snappy
+  snappy, randgen, openarrays_snappy, nimstreams_snappy
 
 include system/timers
 

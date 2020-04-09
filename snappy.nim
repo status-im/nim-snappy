@@ -11,7 +11,7 @@ const
   inputMargin = 16 - 1
 
 # PutUvarint encodes a uint64 into buf and returns the number of bytes written.
-proc putUvarint(s: OutputStreamVar, x: uint64) =
+proc putUvarint(s: OutputStream, x: uint64) =
   var x = x
   while x >= 0x80'u64:
     s.append byte(x and 0xFF) or 0x80
@@ -73,7 +73,7 @@ func load64(b: openArray[byte], i: int): uint64 =
 #
 # It assumes that:
 #  1 <= len(lit) and len(lit) <= 65536
-proc emitLiteral(s: OutputStreamVar, lit: openarray[byte]) =
+proc emitLiteral(s: OutputStream, lit: openarray[byte]) =
   let n = lit.len - 1
 
   if n < 60:
@@ -93,7 +93,7 @@ proc emitLiteral(s: OutputStreamVar, lit: openarray[byte]) =
 # It assumes that:
 #  1 <= offset and offset <= 65535
 #  4 <= length and length <= 65535
-proc emitCopy(s: OutputStreamVar, offset, length: int) =
+proc emitCopy(s: OutputStream, offset, length: int) =
   var length = length
   # The maximum length for a single tagCopy1 or tagCopy2 op is 64 bytes. The
   # threshold for this loop is a little higher (at 68 = 64 + 4), and the
@@ -153,7 +153,7 @@ func hash(u, shift: uint32): uint32 =
 # It also assumes that:
 #  len(dst) >= MaxEncodedLen(len(src)) and
 #  minNonLiteralBlockSize <= len(src) and len(src) <= maxBlockSize
-proc encodeBlock(output: OutputStreamVar, src: openArray[byte]) =
+proc encodeBlock(output: OutputStream, src: openArray[byte]) =
   # Initialize the hash table. Its size ranges from 1shl8 to 1shl14 inclusive.
   # The table element type is uint16, as s < sLimit and sLimit < len(src)
   # and len(src) <= maxBlockSize and maxBlockSize == 65536.
@@ -396,7 +396,7 @@ const
 # Otherwise, a newly allocated slice will be returned.
 #
 # The dst and src must not overlap. It is valid to pass a nil dst.
-proc appendSnappyBytes*(s: OutputStreamVar, src: openArray[byte]) =
+proc appendSnappyBytes*(s: OutputStream, src: openArray[byte]) =
   let n = maxEncodedLen(src.len)
   if n == 0: return
 
@@ -421,30 +421,40 @@ proc appendSnappyBytes*(s: OutputStreamVar, src: openArray[byte]) =
     dec(len, blockSize)
 
 let SnappyStreamVTable = OutputStreamVTable(
-  writePage: proc (s: OutputStreamVar, data: openarray[byte])
+  writePage: proc (s: OutputStream, data: openarray[byte])
                   {.nimcall, gcsafe, raises: [IOError, Defect].} =
-    OutputStreamVar(s.outputDevice).encodeBlock data
+    encodeBlock(LayeredOutputStream(s).subStream, data)
   ,
-  flush: proc (s: OutputStreamVar) {.nimcall, gcsafe.} =
-    OutputStreamVar(s.outputDevice).flush
+  flush: proc (s: OutputStream) {.nimcall, gcsafe.} =
+    flush LayeredOutputStream(s).subStream
 )
 
-proc initSnappyStream*(targetStream: OutputStreamVar): ref OutputStream =
-  new result
-  result.initWithSinglePage maxBlockSize, maxBlockSize
-  result.outputDevice = targetStream
-  result.vtable = unsafeAddr SnappyStreamVTable
+func initSnappyStream*(targetStream: OutputStream): OutputStreamHandle =
+  var stream = LayeredOutputStream(
+    vtable: vtableAddr(SnappyStreamVTable),
+    pageSize: maxBlockSize,
+    maxWriteSize: maxBlockSize,
+    subStream: targetStream)
+
+  stream.initWithSinglePage()
+
+  OutputStreamHandle(s: stream)
 
 # Encode returns the encoded form of src.
-proc encode*(src: openarray[byte]): seq[byte] =
+func encode*(src: openarray[byte]): seq[byte] =
   let n = maxEncodedLen(src.len)
   if n == 0: return
   result = newSeq[byte](n)
-  var outputStream = OutputStream.init(addr result[0], result.len)
-  outputStream.putUVarInt uint64(src.len)
-  var snappyStream = initSnappyStream(outputStream)
-  snappyStream.append src
-  snappyStream.flush
+  {.noSideEffect.}:
+    # We assume no side-effects here, because we are working
+    # with a `memoryOutput`. The computed side-effects differ
+    # because the code of the SnappyStream may be used to write
+    # to a file or a network device as well.
+    var outputStream = memoryOutput(addr result[0], result.len)
+    outputStream.putUVarInt uint64(src.len)
+    var snappyStream = initSnappyStream(outputStream)
+    snappyStream.append src
+    snappyStream.flush
   result.setLen outputStream.pos
 
 # decodedLen returns the length of the decoded block and the number of bytes

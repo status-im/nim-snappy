@@ -13,7 +13,7 @@ func checkCrc32(data: openArray[byte], expected: uint32): bool =
   let actual = masked_crc32c(data[0].unsafeAddr, data.len.uint)
   result = actual == expected
 
-proc checkData(data: openArray[byte], crc: uint32, output: OutputStreamVar): bool =
+proc checkData(data: openArray[byte], crc: uint32, output: OutputStream): bool =
   if not checkCrc32(data, crc):
     return
 
@@ -38,8 +38,8 @@ const
 
   STREAM_HEADER                = "\xff\x06\x00\x00sNaPpY"
 
-proc framing_format_uncompress*(input: ByteStreamVar, output: OutputStreamVar) =
-  if not input[].ensureBytes(STREAM_HEADER.len):
+proc framing_format_uncompress*(input: InputStream, output: OutputStream) =
+  if not input.ensureBytes(STREAM_HEADER.len):
     # debugEcho "NOT A SNAPPY STREAM"
     return
 
@@ -50,11 +50,11 @@ proc framing_format_uncompress*(input: ByteStreamVar, output: OutputStreamVar) =
   var uncompressedData = newSeq[byte](MAX_UNCOMPRESSED_DATA_LEN)
 
   while true:
-    if input[].eof():
+    if input.eof():
       break
 
     # ensure bytes
-    if not input[].ensureBytes(4):
+    if not input.ensureBytes(4):
       # debugEcho "CHK 1 NOT ENOUGH BYTES"
       return
 
@@ -62,7 +62,7 @@ proc framing_format_uncompress*(input: ByteStreamVar, output: OutputStreamVar) =
     let id = x and 0xFF
     let dataLen = (x shr 8).int
 
-    if not input[].ensureBytes(dataLen):
+    if not input.ensureBytes(dataLen):
       # debugEcho "CHK 2 NOT ENOUGH BYTES"
       # debugEcho "request: ", dataLen
       # debugEcho "pos: ", input[].pos
@@ -104,7 +104,7 @@ proc framing_format_uncompress*(input: ByteStreamVar, output: OutputStreamVar) =
 
   output.flush()
 
-proc processFrame*(output: OutputStreamVar, dst: var openArray[byte], src: openArray[byte]) =
+proc processFrame*(output: OutputStream, dst: var openArray[byte], src: openArray[byte]) =
   let
     crc = masked_crc32c(src[0].unsafeAddr, src.len.uint)
     varintLen = oas.putUvarint(dst, src.len.uint64)
@@ -123,7 +123,7 @@ proc processFrame*(output: OutputStreamVar, dst: var openArray[byte], src: openA
     output.append toBytesLE(crc)
     output.append dst.toOpenArray(0, encodedLen-1)
 
-proc framing_format_compress*(output: OutputStreamVar, src: openArray[byte]) =
+proc framing_format_compress*(output: OutputStream, src: openArray[byte]) =
   const maxFrameSize = MAX_UNCOMPRESSED_DATA_LEN
   var compressedData = newSeq[byte](MAX_COMPRESSED_DATA_LEN)
 
