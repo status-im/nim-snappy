@@ -421,15 +421,16 @@ proc appendSnappyBytes*(s: OutputStream, src: openArray[byte]) =
     dec(len, blockSize)
 
 let SnappyStreamVTable = OutputStreamVTable(
-  writePage: proc (s: OutputStream, data: openarray[byte])
-                  {.nimcall, gcsafe, raises: [IOError, Defect].} =
+  writePageSync: proc (s: OutputStream, data: openarray[byte])
+                      {.nimcall, gcsafe, raises: [IOError, Defect].} =
     encodeBlock(LayeredOutputStream(s).subStream, data)
   ,
-  flush: proc (s: OutputStream) {.nimcall, gcsafe.} =
+  flushSync: proc (s: OutputStream)
+                  {.nimcall, gcsafe, raises: [IOError, Defect].} =
     flush LayeredOutputStream(s).subStream
 )
 
-func initSnappyStream*(targetStream: OutputStream): OutputStreamHandle =
+func snappyOutputStream*(targetStream: OutputStream): OutputStreamHandle =
   var stream = LayeredOutputStream(
     vtable: vtableAddr(SnappyStreamVTable),
     pageSize: maxBlockSize,
@@ -450,12 +451,12 @@ func encode*(src: openarray[byte]): seq[byte] =
     # with a `memoryOutput`. The computed side-effects differ
     # because the code of the SnappyStream may be used to write
     # to a file or a network device as well.
-    var outputStream = memoryOutput(addr result[0], result.len)
-    outputStream.putUVarInt uint64(src.len)
-    var snappyStream = initSnappyStream(outputStream)
+    var memOutput = memoryOutput(addr result[0], result.len)
+    memOutput.putUVarInt uint64(src.len)
+    var snappyStream = snappyOutputStream(memOutput)
     snappyStream.append src
     snappyStream.flush
-  result.setLen outputStream.pos
+  result.setLen memOutput.pos
 
 # decodedLen returns the length of the decoded block and the number of bytes
 # that the length header occupied.

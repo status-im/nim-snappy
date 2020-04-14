@@ -9,12 +9,12 @@ import
 #       we can't use nimPNG CRC32
 proc masked_crc32c(buf: ptr byte, len: uint): cuint {.cdecl, importc.}
 
-func checkCrc32(data: openArray[byte], expected: uint32): bool =
+func checkCrc(data: openArray[byte], expected: uint32): bool =
   let actual = masked_crc32c(data[0].unsafeAddr, data.len.uint)
   result = actual == expected
 
-proc checkData(data: openArray[byte], crc: uint32, output: OutputStream): bool =
-  if not checkCrc32(data, crc):
+proc checkCrcAndAppend(output: OutputStream, data: openArray[byte], crc: uint32): bool =
+  if not checkCrc(data, crc):
     return
 
   output.append(data)
@@ -39,30 +39,22 @@ const
   STREAM_HEADER                = "\xff\x06\x00\x00sNaPpY"
 
 proc framing_format_uncompress*(input: InputStream, output: OutputStream) =
-  if not input.ensureBytes(STREAM_HEADER.len):
+  if not input.readable(STREAM_HEADER.len):
     # debugEcho "NOT A SNAPPY STREAM"
     return
 
-  if input.readBytes(STREAM_HEADER.len) != STREAM_HEADER.toOpenArrayByte(0, STREAM_HEADER.len-1):
+  if input.read(STREAM_HEADER.len) != STREAM_HEADER.toOpenArrayByte(0, STREAM_HEADER.len-1):
     # debugEcho "BAD HEADER"
     return
 
   var uncompressedData = newSeq[byte](MAX_UNCOMPRESSED_DATA_LEN)
 
-  while true:
-    if input.eof():
-      break
-
-    # ensure bytes
-    if not input.ensureBytes(4):
-      # debugEcho "CHK 1 NOT ENOUGH BYTES"
-      return
-
-    let x = uint32.fromBytesLE(input.readBytes(4))
+  while input.readable(4):
+    let x = uint32.fromBytesLE input.read(4)
     let id = x and 0xFF
     let dataLen = (x shr 8).int
 
-    if not input.ensureBytes(dataLen):
+    if not input.readable(dataLen):
       # debugEcho "CHK 2 NOT ENOUGH BYTES"
       # debugEcho "request: ", dataLen
       # debugEcho "pos: ", input[].pos
@@ -71,10 +63,10 @@ proc framing_format_uncompress*(input: InputStream, output: OutputStream) =
       return
 
     if id == COMPRESSED_DATA_IDENTIFIER:
-      let crc = uint32.fromBytesLE(input.readBytes(4))
+      let crc = uint32.fromBytesLE input.read(4)
 
       let uncompressedLen = snappyUncompress(
-        input.readBytes(dataLen - 4),
+        input.read(dataLen - 4),
         uncompressedData
       )
 
@@ -82,13 +74,13 @@ proc framing_format_uncompress*(input: InputStream, output: OutputStream) =
         # debugEcho "BAD LEN"
         return
 
-      if not checkData(uncompressedData.toOpenArray(0, uncompressedLen-1), crc, output):
+      if not output.checkCrcAndAppend(uncompressedData.toOpenArray(0, uncompressedLen-1), crc):
         # debugEcho "BAD CRC"
         return
 
     elif id == UNCOMPRESSED_DATA_IDENTIFIER:
-      let crc = uint32.fromBytesLE(input.readBytes(4))
-      if not checkData(input.readBytes(dataLen - 4), crc, output):
+      let crc = uint32.fromBytesLE(input.read(4))
+      if not output.checkCrcAndAppend(input.read(dataLen - 4), crc):
         # debugEcho "BAD CRC UNCOMP"
         return
     elif id < 0x80:
@@ -100,7 +92,7 @@ proc framing_format_uncompress*(input: InputStream, output: OutputStream) =
     else:
       # Reserved skippable chunks (chunk types 0x80-0xfe)
       # including STREAM_HEADER (0xff) should be skipped
-      seekForward(input.readBytes(dataLen))
+      seekForward(input.read(dataLen))
 
   output.flush()
 

@@ -1,5 +1,6 @@
 import
   os, unittest, terminal, strutils, streams,
+  faststreams,
   snappy, randgen, openarrays_snappy, nimstreams_snappy
 
 include system/timers
@@ -141,12 +142,11 @@ proc roundTripRev(msg: string, sourceName: string): bool =
 template toBytes(s: string): auto =
   toOpenArrayByte(s, 0, s.len-1)
 
-when false:
-  proc compressFileWithFaststreams(src, dst: string) =
-    var input = faststreams.openFile(src)
-    var output = OutputStream.init(dst)
-    output.appendSnappyBytes input.readBytes(input.endPos - 1)
-    output.flush()
+proc compressFileWithFaststreams(src, dst: string) =
+  var input = fileInput(src)
+  var output = fileOutput(dst)
+  output.appendSnappyBytes input.read(input.endPos - 1)
+  output.flush()
 
 proc compressFileWithNimStreams(src, dst: string) =
   var input = newFileStream(src, fmRead)
@@ -168,16 +168,15 @@ suite "snappy":
       largeFileCopy1 = dataDir / "largefile.bin.copy.1"
       largeFileCopy2 = dataDir / "largefile.bin.copy.2"
 
-    when false:
-      var time = 0
-      timeit(time): compressFileWithFaststreams(largeFile, largeFileCopy1)
-      styledEcho "  compress file [Faststreams]: ", styleBright, $time, "ms"
+    var time = 0
+    timeit(time): compressFileWithFaststreams(largeFile, largeFileCopy1)
+    styledEcho "  compress file [Faststreams]: ", styleBright, $time, "ms"
 
-      timeit(time): compressFileWithFaststreams(largeFile, largeFileCopy2)
-      styledEcho "  compress file [Faststreams]: ", styleBright, $time, "ms"
+    timeit(time): compressFileWithFaststreams(largeFile, largeFileCopy2)
+    styledEcho "  compress file [Faststreams]: ", styleBright, $time, "ms"
 
-      removeFile largeFileCopy1
-      removeFile largeFileCopy2
+    removeFile largeFileCopy1
+    removeFile largeFileCopy2
 
   test "basic roundtrip test":
     check roundTrip("empty", empty)
