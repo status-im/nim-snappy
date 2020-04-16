@@ -96,6 +96,11 @@ proc framing_format_uncompress*(input: InputStream, output: OutputStream) =
 
   output.flush()
 
+proc framingFormatUncompress*(input: openarray[byte]): seq[byte] =
+  var output = memoryOutput()
+  framing_format_uncompress memoryInput(input), output
+  return output.getOutput
+
 proc processFrame*(output: OutputStream, dst: var openArray[byte], src: openArray[byte]) =
   let
     crc = masked_crc32c(src[0].unsafeAddr, src.len.uint)
