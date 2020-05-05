@@ -5,10 +5,10 @@ import
 
 template check_uncompress(source, target: string) =
   test "uncompress " & source & " to " & target:
-    var inStream = fileInput(compDir & source)
+    var inStream = memFileInput(compDir & source)
     var outStream = memoryOutput()
 
-    framing_format_uncompress(inStream, outStream)
+    uncompressFramedStream(inStream, outStream)
 
     let expected = readFile(uncompDir & target)
     let actual = outStream.getOutput(string)
@@ -23,13 +23,13 @@ template check_roundtrip(source) =
     let expected = readFile(uncompDir & source)
     var ost = memoryOutput()
 
-    framing_format_compress(ost, expected.toOpenArrayByte(0, expected.len-1))
+    framingFormatCompress(ost, expected.toOpenArrayByte(0, expected.len-1))
     let compressed = ost.getOutput(string)
     debugEcho "compressed len: ", compressed.len
 
     var inst = memoryInput(compressed)
     var outst = memoryOutput()
-    framing_format_uncompress(inst, outst)
+    uncompressFramedStream(inst, outst)
     let actual = outst.getOutput(string)
     check actual.len == expected.len
 

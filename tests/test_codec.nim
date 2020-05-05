@@ -143,9 +143,9 @@ template toBytes(s: string): auto =
   toOpenArrayByte(s, 0, s.len-1)
 
 proc compressFileWithFaststreams(src, dst: string) =
-  var input = fileInput(src)
+  var input = memFileInput(src)
   var output = fileOutput(dst)
-  output.appendSnappyBytes input.read(input.endPos - 1)
+  output.appendSnappyBytes input.read(input.len.get)
   output.flush()
 
 proc compressFileWithNimStreams(src, dst: string) =

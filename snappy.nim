@@ -1,6 +1,7 @@
 import
-  snappy/utils,
-  faststreams/output_stream
+  stew/ranges/ptr_arith,
+  faststreams/[inputs, outputs, buffers, multisync],
+  snappy/utils
 
 const
   tagLiteral* = 0x00
@@ -10,13 +11,18 @@ const
 
   inputMargin = 16 - 1
 
+type
+  SnappyError* = object of CatchableError
+  UnexpectedEofError* = object of SnappyError
+  MalformedSnappyData* = object of SnappyError
+
 # PutUvarint encodes a uint64 into buf and returns the number of bytes written.
 proc putUvarint(s: OutputStream, x: uint64) =
   var x = x
   while x >= 0x80'u64:
-    s.append byte(x and 0xFF) or 0x80
+    s.write byte(x and 0xFF) or 0x80
     x = x shr 7
-  s.append byte(x and 0xFF)
+  s.write byte(x and 0xFF)
 
 # Uvarint decodes a uint64 from buf and returns that value and the
 # number of bytes read (> 0). If an error occurred, the value is 0
@@ -77,16 +83,16 @@ proc emitLiteral(s: OutputStream, lit: openarray[byte]) =
   let n = lit.len - 1
 
   if n < 60:
-    s.append (byte(n) shl 2) or tagLiteral
+    s.write (byte(n) shl 2) or tagLiteral
   elif n < (1 shl 8):
-    s.append (60 shl 2) or tagLiteral
-    s.append byte(n and 0xFF)
+    s.write (60 shl 2) or tagLiteral
+    s.write byte(n and 0xFF)
   else:
-    s.append (61 shl 2) or tagLiteral
-    s.append byte(n and 0xFF)
-    s.append byte((n shr 8) and 0xFF)
+    s.write (61 shl 2) or tagLiteral
+    s.write byte(n and 0xFF)
+    s.write byte((n shr 8) and 0xFF)
 
-  s.append lit
+  s.writeAndWait lit
 
 # emitCopy writes a copy chunk.
 #
@@ -106,27 +112,27 @@ proc emitCopy(s: OutputStream, offset, length: int) =
   # encodes-as-3-bytes tagCopy2 instead of an encodes-as-2-bytes tagCopy1.
   while length >= 68:
     # Emit a length 64 copy, encoded as 3 bytes.
-    s.append (63 shl 2) or tagCopy2
-    s.append byte(offset and 0xFF)
-    s.append byte((offset shr 8) and 0xFF)
+    s.write (63 shl 2) or tagCopy2
+    s.write byte(offset and 0xFF)
+    s.write byte((offset shr 8) and 0xFF)
     dec(length, 64)
 
   if length > 64:
     # Emit a length 60 copy, encoded as 3 bytes.
-    s.append (59 shl 2) or tagCopy2
-    s.append byte(offset and 0xFF)
-    s.append byte((offset shr 8) and 0xFF)
+    s.write (59 shl 2) or tagCopy2
+    s.write byte(offset and 0xFF)
+    s.write byte((offset shr 8) and 0xFF)
     dec(length, 60)
 
   if (length >= 12) or (offset >= 2048):
     # Emit the remaining copy, encoded as 3 bytes.
-    s.append byte((((length-1) shl 2) or tagCopy2) and 0xFF)
-    s.append byte(offset and 0xFF)
-    s.append byte((offset shr 8) and 0xFF)
+    s.write byte((((length-1) shl 2) or tagCopy2) and 0xFF)
+    s.write byte(offset and 0xFF)
+    s.write byte((offset shr 8) and 0xFF)
     return
 
-  s.append byte((((offset shr 8) shl 5) or ((length-4) shl 2) or tagCopy1) and 0xFF)
-  s.append byte(offset and 0xFF)
+  s.write byte((((offset shr 8) shl 5) or ((length-4) shl 2) or tagCopy1) and 0xFF)
+  s.write byte(offset and 0xFF)
 
 when false:
   # extendMatch returns the largest k such that k <= len(src) and that
@@ -420,43 +426,32 @@ proc appendSnappyBytes*(s: OutputStream, src: openArray[byte]) =
     inc(p, blockSize)
     dec(len, blockSize)
 
-let SnappyStreamVTable = OutputStreamVTable(
-  writePageSync: proc (s: OutputStream, data: openarray[byte])
-                      {.nimcall, gcsafe, raises: [IOError, Defect].} =
-    encodeBlock(LayeredOutputStream(s).subStream, data)
-  ,
-  flushSync: proc (s: OutputStream)
-                  {.nimcall, gcsafe, raises: [IOError, Defect].} =
-    flush LayeredOutputStream(s).subStream
-)
+proc snappyCompress*(input: InputStream, output: OutputStream) =
+  try:
+    let inputLen = input.len
+    if inputLen.isSome:
+      output.ensureRunway maxEncodedLen(inputLen.get)
+      output.putUVarInt uint64(inputLen.get)
+    else:
+      # TODO: This is a temporary limitation
+      doAssert false, "snappy requires an input stream with a known length"
 
-func snappyOutputStream*(targetStream: OutputStream): OutputStreamHandle =
-  var stream = LayeredOutputStream(
-    vtable: vtableAddr(SnappyStreamVTable),
-    pageSize: maxBlockSize,
-    maxWriteSize: maxBlockSize,
-    subStream: targetStream)
+    while input.readable(maxBlockSize):
+      encodeBlock(output, input.read(maxBlockSize))
 
-  stream.initWithSinglePage()
-
-  OutputStreamHandle(s: stream)
+    let remainingBytes = input.totalUnconsumedBytes
+    if remainingBytes > 0:
+      encodeBlock(output, input.read(remainingBytes))
+  finally:
+    close output
 
 # Encode returns the encoded form of src.
 func encode*(src: openarray[byte]): seq[byte] =
-  let n = maxEncodedLen(src.len)
-  if n == 0: return
-  result = newSeq[byte](n)
+  # Memory streams doesn't have side effects:
   {.noSideEffect.}:
-    # We assume no side-effects here, because we are working
-    # with a `memoryOutput`. The computed side-effects differ
-    # because the code of the SnappyStream may be used to write
-    # to a file or a network device as well.
-    var memOutput = memoryOutput(addr result[0], result.len)
-    memOutput.putUVarInt uint64(src.len)
-    var snappyStream = snappyOutputStream(memOutput)
-    snappyStream.append src
-    snappyStream.flush
-  result.setLen memOutput.pos
+    let output = memoryOutput()
+    snappyCompress(unsafeMemoryInput(src), output)
+    output.getOutput
 
 # decodedLen returns the length of the decoded block and the number of bytes
 # that the length header occupied.
