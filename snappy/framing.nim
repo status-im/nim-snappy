@@ -9,11 +9,11 @@ import
 #       we can't use nimPNG CRC32
 proc masked_crc32c(buf: ptr byte, len: uint): cuint {.cdecl, importc.}
 
-func checkCrc(data: openArray[byte], expected: uint32): bool =
+func checkCrc*(data: openArray[byte], expected: uint32): bool =
   let actual = masked_crc32c(data[0].unsafeAddr, data.len.uint)
   result = actual == expected
 
-proc checkCrcAndAppend(output: OutputStream, data: openArray[byte], crc: uint32): bool =
+proc checkCrcAndAppend*(output: OutputStream, data: openArray[byte], crc: uint32): bool =
   if checkCrc(data, crc):
     output.write(data)
     return true
@@ -22,15 +22,15 @@ const
   # maximum chunk data length
   # MAX_DATA_LEN                 = 16777215
   # maximum uncompressed data length excluding checksum
-  MAX_UNCOMPRESSED_DATA_LEN    = 65536
+  MAX_UNCOMPRESSED_DATA_LEN*    = 65536
   # maximum uncompressed data length excluding checksum
-  MAX_COMPRESSED_DATA_LEN      = maxEncodedLen(MAX_UNCOMPRESSED_DATA_LEN)
+  MAX_COMPRESSED_DATA_LEN*      = maxEncodedLen(MAX_UNCOMPRESSED_DATA_LEN)
 
-  COMPRESSED_DATA_IDENTIFIER   = 0x00
-  UNCOMPRESSED_DATA_IDENTIFIER = 0x01
-  STREAM_IDENTIFIER            = 0xff
+  COMPRESSED_DATA_IDENTIFIER*   = 0x00
+  UNCOMPRESSED_DATA_IDENTIFIER* = 0x01
+  STREAM_IDENTIFIER*            = 0xff
 
-  STREAM_HEADER                = "\xff\x06\x00\x00sNaPpY"
+  STREAM_HEADER*                = "\xff\x06\x00\x00sNaPpY"
 
 proc uncompressFramedStream*(input: InputStream, output: OutputStream) {.fsMultiSync.} =
   try:
