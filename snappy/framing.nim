@@ -130,3 +130,9 @@ proc framingFormatCompress*(output: OutputStream, src: openArray[byte]) =
     dec(len, frameSize)
 
   output.flush()
+
+proc framingFormatCompress*(src: openArray[byte]): seq[byte] =
+  var output = memoryOutput()
+  framingFormatCompress(output, src)
+  return output.getOutput
+
