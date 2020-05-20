@@ -1,8 +1,11 @@
 import
-  ../snappy, ../snappy/utils,
-  ../tests/openarrays_snappy as oas,
   faststreams/[inputs, outputs, multisync],
-  stew/endians2
+  stew/endians2,
+  ../snappy, utils, types,
+  ../tests/openarrays_snappy as oas
+
+export
+  types
 
 {.compile: "crc32c.c".}
 # TODO: we don't have a native implementation of CRC32C algorithm yet.
@@ -63,7 +66,7 @@ proc uncompressFramedStream*(input: InputStream, output: OutputStream) {.fsMulti
 
         if uncompressedLen <= 0:
           raise newException(MalformedSnappyData, "Failed to decompress content")
-          
+
         if not checkCrcAndAppend(Sync output, uncompressedData.toOpenArray(0, uncompressedLen-1), crc):
           raise newException(MalformedSnappyData, "Content CRC checksum failed")
 
@@ -88,10 +91,13 @@ proc uncompressFramedStream*(input: InputStream, output: OutputStream) {.fsMulti
   finally:
     close output
 
-proc framingFormatUncompress*(input: openarray[byte]): seq[byte] =
+proc framingFormatUncompress*(input: InputStream): seq[byte] =
   var output = memoryOutput()
-  uncompressFramedStream unsafeMemoryInput(input), output
+  uncompressFramedStream input, output
   return output.getOutput
+
+proc framingFormatUncompress*(input: openarray[byte]): seq[byte] =
+  framingFormatUncompress unsafeMemoryInput(input)
 
 proc processFrame*(output: OutputStream, dst: var openArray[byte], src: openArray[byte]) =
   let
