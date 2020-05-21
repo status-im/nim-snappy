@@ -1,7 +1,7 @@
 import
   stew/ranges/ptr_arith,
   faststreams/[inputs, outputs, buffers, multisync],
-  snappy/utils
+  snappy/[types, utils]
 
 const
   tagLiteral* = 0x00
@@ -11,10 +11,8 @@ const
 
   inputMargin = 16 - 1
 
-type
-  SnappyError* = object of CatchableError
-  UnexpectedEofError* = object of SnappyError
-  MalformedSnappyData* = object of SnappyError
+export
+  types
 
 # PutUvarint encodes a uint64 into buf and returns the number of bytes written.
 proc putUvarint(s: OutputStream, x: uint64) =

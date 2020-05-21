@@ -1,3 +1,10 @@
+nimcache/
+snappycpp/
+
 master
 *.exe
 *.a
+
+# Fuzzer-generated files
+crash-*
+
