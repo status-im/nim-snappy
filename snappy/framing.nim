@@ -13,7 +13,8 @@ export
 proc masked_crc32c(buf: ptr byte, len: uint): cuint {.cdecl, importc.}
 
 func checkCrc*(data: openArray[byte], expected: uint32): bool =
-  let actual = masked_crc32c(data[0].unsafeAddr, data.len.uint)
+  let startPtr = if data.len == 0: nil else: data[0].unsafeAddr
+  let actual = masked_crc32c(startPtr, data.len.uint)
   result = actual == expected
 
 proc checkCrcAndAppend*(output: OutputStream, data: openArray[byte], crc: uint32): bool =
