@@ -16,8 +16,7 @@ cli do (format {.argument.}: SnappyFormat,
 
   let
     collectCorpusNim = fuzzingDir / "collect_corpus.nim"
-    fuzzNims = fuzzingDir / ".." / ".." / ".." / "nim-testutils" / "testutils" / "fuzzing" / "fuzz.nims"
 
   exec &"""nim c -r "{collectCorpusNim}""""
-  exec &"""nim "{fuzzNims}" {fuzzer} "{fuzzingFile}" "{corpusDir}" """
+  exec &"""ntu fuzz --fuzzer:{fuzzer} --corpus:"{corpusDir}" "{fuzzingFile}" """
 
