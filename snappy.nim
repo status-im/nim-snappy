@@ -453,9 +453,9 @@ func encode*(src: openarray[byte]): seq[byte] =
 
 # decodedLen returns the length of the decoded block and the number of bytes
 # that the length header occupied.
-func decode*(src: openArray[byte]): seq[byte] =
+func decode*(src: openArray[byte], maxSize = 0xffffffff'u64): seq[byte] =
   let (len, bytesRead) = uvarint(src)
-  if bytesRead <= 0 or len > 0xffffffff'u64:
+  if bytesRead <= 0 or len > maxSize:
     return
 
   const wordSize = sizeof(uint) * 8
