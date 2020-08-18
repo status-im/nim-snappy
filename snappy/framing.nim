@@ -1,7 +1,7 @@
 import
   faststreams/[inputs, outputs, multisync],
   stew/endians2,
-  ../snappy, utils, types,
+  ../snappy, types,
   ../tests/openarrays_snappy as oas
 
 export
@@ -28,7 +28,7 @@ const
   # maximum uncompressed data length excluding checksum
   MAX_UNCOMPRESSED_DATA_LEN*    = 65536
   # maximum uncompressed data length excluding checksum
-  MAX_COMPRESSED_DATA_LEN*      = maxEncodedLen(MAX_UNCOMPRESSED_DATA_LEN)
+  MAX_COMPRESSED_DATA_LEN*      = int maxCompressedLen(MAX_UNCOMPRESSED_DATA_LEN)
 
   COMPRESSED_DATA_IDENTIFIER*   = 0x00
   UNCOMPRESSED_DATA_IDENTIFIER* = 0x01
@@ -49,7 +49,7 @@ proc uncompressFramedStream*(input: InputStream, output: OutputStream) {.fsMulti
     while input.readable(4):
       let x = uint32.fromBytesLE input.read(4)
       let id = x and 0xFF
-      let dataLen = (x shr 8).int
+      let dataLen = int(x shr 8)
 
       if dataLen > MAX_COMPRESSED_DATA_LEN:
         raise newException(MalformedSnappyData, "Invalid frame length")
@@ -63,7 +63,7 @@ proc uncompressFramedStream*(input: InputStream, output: OutputStream) {.fsMulti
 
         let
           crc = uint32.fromBytesLE input.read(4)
-          uncompressedLen = snappyUncompress(input.read(dataLen - 4), uncompressedData)
+          uncompressedLen = int snappyUncompress(input.read(dataLen - 4), uncompressedData)
 
         if uncompressedLen <= 0:
           raise newException(MalformedSnappyData, "Failed to decompress content")

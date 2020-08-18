@@ -1,3 +1,5 @@
+{.used.}
+
 import
   unittest, os,
   faststreams,
@@ -25,7 +27,6 @@ template check_roundtrip(source) =
 
     framingFormatCompress(ost, expected.toOpenArrayByte(0, expected.len-1))
     let compressed = ost.getOutput(string)
-    debugEcho "compressed len: ", compressed.len
 
     var inst = memoryInput(compressed)
     var outst = memoryOutput()
@@ -42,8 +43,8 @@ proc main() =
   suite "framing":
     setup:
       let
-        compDir = getAppDir() & DirSep & "stream_compressed" & DirSep
-        uncompDir = getAppDir() & DirSep & "data" & DirSep
+        compDir {.used.} = getAppDir() & DirSep & "stream_compressed" & DirSep
+        uncompDir {.used.} = getAppDir() & DirSep & "data" & DirSep
 
     check_uncompress("alice29.txt.sz-32k", "alice29.txt")
     check_uncompress("alice29.txt.sz-64k", "alice29.txt")

@@ -32,7 +32,7 @@ proc randPrimitives*[T](val: int): T =
 iterator randList*(T: typedesc, strGen, listGen: RandGen, unique: bool = true): T =
   let listLen = listGen.getVal()
   if unique:
-    var set = initSet[T]()
+    var set = initHashSet[T]()
     for len in 0..<listLen:
       while true:
         let x = randPrimitives[T](strGen.getVal())

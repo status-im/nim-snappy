@@ -1,9 +1,16 @@
+{.used.}
+
 import
-  os, unittest, terminal, strutils, streams,
+  os, unittest, terminal, strutils,
   faststreams,
   snappy, randgen, openarrays_snappy, nimstreams_snappy
 
 include system/timers
+
+const
+  currentDir = currentSourcePath.parentDir
+
+{.passl: "-lsnappy -L\"" & currentDir & "\" -lstdc++".}
 
 type
   TestTimes = object
@@ -23,10 +30,10 @@ proc printTimes(t: TestTimes) =
   styledEcho "  cpu time [NimStreams]: ", styleBright, $t.nimStreams, "ms"
   styledEcho "  cpu time [C++ Snappy]: ", styleBright, $t.cppLib, "ms"
 
-proc snappy_compress(input: cstring, input_length: csize, compressed: cstring, compressed_length: var csize): cint {.importc, cdecl.}
-proc snappy_uncompress(compressed: cstring, compressed_length: csize, uncompressed: cstring, uncompressed_length: var csize): cint {.importc, cdecl.}
-proc snappy_max_compressed_length(source_length: csize): csize {.importc, cdecl.}
-proc snappy_uncompressed_length(compressed: cstring, compressed_length: csize, res: var csize): cint {.importc, cdecl.}
+proc snappy_compress(input: cstring, input_length: csize_t, compressed: cstring, compressed_length: var csize_t): cint {.importc, cdecl.}
+proc snappy_uncompress(compressed: cstring, compressed_length: csize_t, uncompressed: cstring, uncompressed_length: var csize_t): cint {.importc, cdecl.}
+proc snappy_max_compressed_length(source_length: csize_t): csize_t {.importc, cdecl.}
+proc snappy_uncompressed_length(compressed: cstring, compressed_length: csize_t, res: var csize_t): cint {.importc, cdecl.}
 
 const
   testDataDir = "data" & DirSep
@@ -55,19 +62,19 @@ proc timedRoundTrip(msg: string, source: openarray[byte]): (bool, TestTimes) =
     var encodedWithOpenArrays = openarrays_snappy.encode(source)
 
   var
-    encodedWithCpp = newString(snappy_max_compressed_length(source.len.csize))
-    outputSize: csize = encodedWithCpp.len
+    encodedWithCpp = newString(snappy_max_compressed_length(source.len.csize_t))
+    outputSize = csize_t encodedWithCpp.len
 
   timeit(timers.cppLib):
     var success = if source.len > 0:
-      snappy_compress(cast[cstring](source[0].unsafeAddr), source.len.csize, encodedWithCpp[0].addr, outputSize)
+      snappy_compress(cast[cstring](source[0].unsafeAddr), source.len.csize_t, encodedWithCpp[0].addr, outputSize)
     else:
-      snappy_compress(cast[cstring](0), source.len.csize, encodedWithCpp[0].addr, outputSize)
+      snappy_compress(cast[cstring](0), source.len.csize_t, encodedWithCpp[0].addr, outputSize)
 
   var ok = success == 0
   if not ok: echo "cpp_compress failed"
 
-  ok = outputSize == encodedWithOpenArrays.len
+  ok = outputSize == encodedWithOpenArrays.len.csize_t
   if not ok: echo "cpp output size and nim output size differ"
 
   if ok:
@@ -109,15 +116,15 @@ proc timedRoundTrip(msg: string, sourceName: string): auto =
 proc roundTripRev(msg: string, source: openArray[byte]): bool =
   var
     decoded = snappy.decode(source)
-    outputSize: csize = 0
-    ok = snappy_uncompressed_length(cast[cstring](source[0].unsafeAddr), source.len.csize, outputSize) == 0
+    outputSize: csize_t = 0
+    ok = snappy_uncompressed_length(cast[cstring](source[0].unsafeAddr), source.len.csize_t, outputSize) == 0
     cpp_decoded: string
 
   if not ok: echo "maybe a bad data"
 
   if ok:
     cpp_decoded = newString(outputSize)
-    ok = snappy_uncompress(cast[cstring](source[0].unsafeAddr), source.len.csize, cpp_decoded, outputSize) == 0
+    ok = snappy_uncompress(cast[cstring](source[0].unsafeAddr), source.len.csize_t, cpp_decoded, outputSize) == 0
     if not ok: echo "cpp failed to uncompress"
 
   if ok:
@@ -148,10 +155,14 @@ proc compressFileWithFaststreams(src, dst: string) =
   output.appendSnappyBytes input.read(input.len.get)
   output.flush()
 
-proc compressFileWithNimStreams(src, dst: string) =
-  var input = newFileStream(src, fmRead)
-  var output = newFileStream(dst, fmWrite)
-  output.appendSnappyBytes input, getFileSize(src).int
+when false:
+  # TODO: This is not tested yet
+  import streams
+
+  proc compressFileWithNimStreams(src, dst: string) =
+    var input = newFileStream(src, fmRead)
+    var output = newFileStream(dst, fmWrite)
+    output.appendSnappyBytes input, getFileSize(src).int
 
 suite "snappy":
   let

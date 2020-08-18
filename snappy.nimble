@@ -12,6 +12,6 @@ requires "nim >= 0.19.0",
          "stew"
 
 task test, "Run all tests":
-  exec "nim c --passL:\"-lsnappy -L./tests -lstdc++\" -d:debug -r tests/all_tests"
-  exec "nim c --passL:\"-lsnappy -L./tests -lstdc++\" -d:release -r tests/all_tests"
-  exec "nim c --passL:\"-lsnappy -L./tests -lstdc++\" --threads:on -d:release -r tests/all_tests"
+  exec "nim c -d:debug -r tests/all_tests"
+  exec "nim c -d:release -r tests/all_tests"
+  exec "nim c --threads:on -d:release -r tests/all_tests"

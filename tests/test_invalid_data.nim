@@ -1,9 +1,11 @@
+{.used.}
+
 import os, faststreams/inputs, ../snappy/framing
 
 proc parseInvalidInput(payload: openArray[byte]): bool =
   try:
     let input = unsafeMemoryInput(payload)
-    let decoded = framingFormatUncompress(input)
+    let decoded {.used.} = framingFormatUncompress(input)
   except SnappyError:
     result = true
 

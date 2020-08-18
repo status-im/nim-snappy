@@ -1,7 +1,10 @@
 import
   stew/ranges/ptr_arith,
   faststreams/[inputs, outputs, buffers, multisync],
-  snappy/[types, utils]
+  snappy/types
+
+export
+  types
 
 const
   tagLiteral* = 0x00
@@ -11,18 +14,14 @@ const
 
   inputMargin = 16 - 1
 
-export
-  types
-
-# PutUvarint encodes a uint64 into buf and returns the number of bytes written.
-proc putUvarint(s: OutputStream, x: uint64) =
+proc writeVarint(s: OutputStream, x: uint32) =
   var x = x
-  while x >= 0x80'u64:
+  while x >= 0x80'u32:
     s.write byte(x and 0xFF) or 0x80
     x = x shr 7
   s.write byte(x and 0xFF)
 
-# Uvarint decodes a uint64 from buf and returns that value and the
+# readVarint decodes a uint32 from buf and returns that value and the
 # number of bytes read (> 0). If an error occurred, the value is 0
 # and the number of bytes n is <= 0 meaning:
 #
@@ -30,26 +29,17 @@ proc putUvarint(s: OutputStream, x: uint64) =
 #  n  < 0: value larger than 64 bits (overflow)
 #          and -n is the number of bytes read
 #
-func uvarint(buf: openArray[byte]): (uint64, int) =
-  var x: uint64
+func readVarint(buf: openArray[byte]): (uint32, int) =
+  var x: uint32
   var s: uint
   for i, b in buf:
     if int(b) < 0x80:
-      if (i > 9) or (i == 9) and (int(b) > 1):
-        return (0'u64, -(i + 1)) # overflow
-      return (x or (uint64(b) shl s), i + 1)
-    x = x or (uint64(b and 0x7F) shl s)
+      if (i > 4) or (i == 4) and (int(b) >= 16):
+        return (0'u32, -(i + 1)) # overflow
+      return (x or (uint32(b) shl s), i + 1)
+    x = x or (uint32(b and 0x7F) shl s)
     inc(s, 7)
-  result = (0'u64, 0)
-
-template sliceImpl(r: openArray[byte], a, b: int): auto =
-  toOpenArray(cast[ptr array[0, byte]](r[0].unsafeAddr)[], a, b)
-
-template `%`(s, i: untyped): untyped =
-  (when i is BackwardsIndex: s.len - int(i) else: int(i))
-
-template `[]`[U, V](r: openArray[byte], s: HSlice[U, V]): auto =
-  sliceImpl(r, r % s.a, r % s.b)
+  result = (0'u32, 0)
 
 func load32(b: openArray[byte]): uint32 {.inline.} =
   result = uint32(b[0]) or
@@ -155,7 +145,7 @@ func hash(u, shift: uint32): uint32 =
 # been written.
 #
 # It also assumes that:
-#  len(dst) >= MaxEncodedLen(len(src)) and
+#  len(dst) >= maxCompressedLen(len(src)) and
 #  minNonLiteralBlockSize <= len(src) and len(src) <= maxBlockSize
 proc encodeBlock(output: OutputStream, src: openArray[byte]) =
   # Initialize the hash table. Its size ranges from 1shl8 to 1shl14 inclusive.
@@ -286,7 +276,7 @@ const
   decodeErrCodeCorrupt = 1
   decodeErrCodeUnsupportedLiteralLength = 2
 
-func decode(dst, src: var openArray[byte]): int =
+func decode(dst: var openArray[byte], src: openArray[byte]): int =
   var
     d = 0
     s = 0
@@ -327,7 +317,7 @@ func decode(dst, src: var openArray[byte]): int =
       if (length > (dst.len-d)) or (length > (src.len-s)):
         return decodeErrCodeCorrupt
 
-      copyMem(dst[d].addr, src[s].addr, length)
+      copyMem(addr dst[d], unsafeAddr src[s], length)
       inc(d, length)
       inc(s, length)
       continue
@@ -372,9 +362,6 @@ func decode(dst, src: var openArray[byte]): int =
     return decodeErrCodeCorrupt
   return 0
 
-const
-  maxBlockSize = 65536
-
 # minNonLiteralBlockSize is the minimum size of the input to encodeBlock that
 # could be encoded with a copy tag. This is the minimum with respect to the
 # algorithm used by encodeBlock, not a minimum enforced by the file format.
@@ -401,35 +388,32 @@ const
 #
 # The dst and src must not overlap. It is valid to pass a nil dst.
 proc appendSnappyBytes*(s: OutputStream, src: openArray[byte]) =
-  let n = maxEncodedLen(src.len)
-  if n == 0: return
+  var
+    lenU32 = checkInputLen(src.len)
+    p = 0
 
   # The block starts with the varint-encoded length of the decompressed bytes.
-  var
-    p = 0
-    len = src.len
+  s.writeVarint lenU32
 
-  s.putUVarInt uint64(src.len)
+  while lenU32 > maxBlockSize.uint32:
+    s.encodeBlock src.toOpenArray(p, p + maxBlockSize)
+    p += maxBlockSize
+    lenU32 -= maxBlockSize.uint32
 
-  while len > 0:
-    var blockSize = len
-    if blockSize > maxBlockSize:
-      blockSize = maxBlockSize
-
-    if blockSize < minNonLiteralBlockSize:
-      s.emitLiteral src[p..<p+blockSize]
-    else:
-      s.encodeBlock src[p..<p+blockSize]
-
-    inc(p, blockSize)
-    dec(len, blockSize)
+  # The `lenU32.int` expressions below cannot overflow because
+  # `lenU32` is already less than `maxBlockSize` here:
+  if lenU32 < minNonLiteralBlockSize.uint32:
+    s.emitLiteral src.toOpenArray(p, p + lenU32.int)
+  else:
+    s.encodeBlock src.toOpenArray(p, p + lenU32.int)
 
 proc snappyCompress*(input: InputStream, output: OutputStream) =
   try:
     let inputLen = input.len
     if inputLen.isSome:
-      output.ensureRunway maxEncodedLen(inputLen.get)
-      output.putUVarInt uint64(inputLen.get)
+      let lenU32 = checkInputLen(inputLen.get)
+      output.ensureRunway maxCompressedLen(lenU32)
+      output.writeVarint lenU32
     else:
       # TODO: This is a temporary limitation
       doAssert false, "snappy requires an input stream with a known length"
@@ -439,7 +423,10 @@ proc snappyCompress*(input: InputStream, output: OutputStream) =
 
     let remainingBytes = input.totalUnconsumedBytes
     if remainingBytes > 0:
-      encodeBlock(output, input.read(remainingBytes))
+      if remainingBytes < minNonLiteralBlockSize:
+        output.emitLiteral input.read(remainingBytes)
+      else:
+        output.encodeBlock input.read(remainingBytes)
   finally:
     close output
 
@@ -451,40 +438,34 @@ func encode*(src: openarray[byte]): seq[byte] =
     snappyCompress(unsafeMemoryInput(src), output)
     output.getOutput
 
-# decodedLen returns the length of the decoded block and the number of bytes
-# that the length header occupied.
-func decode*(src: openArray[byte], maxSize = 0xffffffff'u64): seq[byte] =
-  let (len, bytesRead) = uvarint(src)
-  if bytesRead <= 0 or len > maxSize:
+func decode*(src: openArray[byte], maxSize = 0xffffffff'u32): seq[byte] =
+  let (lenU32, bytesRead) = readVarint(src)
+  if bytesRead <= 0 or lenU32 > maxSize:
     return
 
-  const wordSize = sizeof(uint) * 8
-  if (wordSize == 32) and (len > 0x7fffffff'u64):
-    return
-
-  if int(len) > 0:
-    result = newSeq[byte](len)
-    let errCode = decode(result, src[bytesRead..^1])
+  if lenU32 > 0:
+    when sizeof(uint) == 4:
+      if lenU32 > 0x7fffffff'u32:
+        return
+    # `lenU32.int` cannot overflow because of the extra check above
+    result = newSeq[byte](lenU32.int)
+    let errCode = decode(result, src.toOpenArray(bytesRead, src.len - 1))
     if errCode != 0: result = @[]
 
-proc snappyUncompress*(src: openArray[byte], dst: var openArray[byte]): int =
-  let (len, bytesRead) = uvarint(src)
-  if bytesRead <= 0 or len > 0xffffffff'u64:
-    return
+proc snappyUncompress*(src: openArray[byte], dst: var openArray[byte]): uint32 =
+  let (uncompressedLen, bytesRead) = readVarint(src)
+  if bytesRead <= 0 or uncompressedLen.BiggestUInt > dst.len.BiggestUInt:
+    return 0
 
-  const wordSize = sizeof(uint) * 8
-  if (wordSize == 32) and (len > 0x7fffffff'u64):
-    return
-
-  if dst.len < int(len):
-    return
-
-  if int(len) > 0:
-    let errCode = decode(dst.toOpenArray(0, len.int-1), src[bytesRead..^1])
+  if uncompressedLen > 0:
+    # `result.int` cannot overflow here, because we've already
+    # checked that it's smaller than the `dst.len` which is an int.
+    let errCode = decode(dst.toOpenArray(0, uncompressedLen.int - 1),
+                         src.toOpenArray(bytesRead, src.len - 1))
     if errCode != 0:
-      return
+      return 0
 
-  result = int(len)
+  return uncompressedLen
 
 template compress*(src: openArray[byte]): seq[byte] =
   snappy.encode(src)
