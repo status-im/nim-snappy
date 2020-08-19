@@ -26,7 +26,7 @@ proc writeVarint(s: OutputStream, x: uint32) =
 # and the number of bytes n is <= 0 meaning:
 #
 #  n == 0: buf too small
-#  n  < 0: value larger than 64 bits (overflow)
+#  n  < 0: value larger than 32 bits (overflow)
 #          and -n is the number of bytes read
 #
 func readVarint(buf: openArray[byte]): (uint32, int) =
