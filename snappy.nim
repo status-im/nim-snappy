@@ -467,8 +467,3 @@ proc snappyUncompress*(src: openArray[byte], dst: var openArray[byte]): uint32 =
 
   return uncompressedLen
 
-template compress*(src: openArray[byte]): seq[byte] =
-  snappy.encode(src)
-
-template uncompress*(src: openArray[byte]): seq[byte] =
-  snappy.decode(src)
