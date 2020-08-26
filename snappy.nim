@@ -48,7 +48,7 @@ func load32(b: openArray[byte]): uint32 {.inline.} =
     (uint32(b[3]) shl 24)
 
 func load32(b: openArray[byte], i: int): uint32 =
-  result = load32(b[i..<i+4])
+  result = load32(b.toOpenArray(i, i + 4 - 1))
 
 func load64(b: openArray[byte]): uint64 {.inline.} =
   result = uint64(b[0]) or
@@ -61,7 +61,7 @@ func load64(b: openArray[byte]): uint64 {.inline.} =
     (uint64(b[7]) shl 56)
 
 func load64(b: openArray[byte], i: int): uint64 =
-  result = load64(b[i..<i+8])
+  result = load64(b.toOpenArray(i, i + 8 - 1))
 
 # emitLiteral writes a literal chunk.
 #
@@ -185,7 +185,7 @@ proc encodeBlock(output: OutputStream, src: openArray[byte]) =
 
   template emitRemainder(): untyped =
     if nextEmit < src.len:
-      emitLiteral(output, src[nextEmit..^1])
+      emitLiteral(output, src.toOpenArray(nextEmit, src.high))
     return
 
   while true:
@@ -225,7 +225,7 @@ proc encodeBlock(output: OutputStream, src: openArray[byte]) =
     # A 4-byte match has been found. We'll later see if more than 4 bytes
     # match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
     # them as literal bytes.
-    output.emitLiteral src[nextEmit..<s]
+    output.emitLiteral src.toOpenArray(nextEmit, s - 1)
 
     # Call emitCopy, and then see if another emitCopy could be our next
     # move. Repeat until we find no match for the input immediately after

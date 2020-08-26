@@ -132,7 +132,7 @@ proc framingFormatCompress*(output: OutputStream, src: openArray[byte]) =
 
   while len > 0:
     let frameSize = min(len, maxFrameSize)
-    processFrame(output, compressedData, src[p..<p+frameSize])
+    processFrame(output, compressedData, src.toOpenArray(p, p+frameSize-1))
     inc(p, frameSize)
     dec(len, frameSize)
 
