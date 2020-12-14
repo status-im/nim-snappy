@@ -1,5 +1,5 @@
 import
-  stew/ranges/ptr_arith,
+  stew/[leb128, ranges/ptr_arith],
   faststreams/[inputs, outputs, buffers, multisync],
   snappy/types
 
@@ -13,33 +13,6 @@ const
   tagCopy4*   = 0x03
 
   inputMargin = 16 - 1
-
-proc writeVarint(s: OutputStream, x: uint32) =
-  var x = x
-  while x >= 0x80'u32:
-    s.write byte(x and 0xFF) or 0x80
-    x = x shr 7
-  s.write byte(x and 0xFF)
-
-# readVarint decodes a uint32 from buf and returns that value and the
-# number of bytes read (> 0). If an error occurred, the value is 0
-# and the number of bytes n is <= 0 meaning:
-#
-#  n == 0: buf too small
-#  n  < 0: value larger than 32 bits (overflow)
-#          and -n is the number of bytes read
-#
-func readVarint(buf: openArray[byte]): (uint32, int) =
-  var x: uint32
-  var s: uint
-  for i, b in buf:
-    if int(b) < 0x80:
-      if (i > 4) or (i == 4) and (int(b) >= 16):
-        return (0'u32, -(i + 1)) # overflow
-      return (x or (uint32(b) shl s), i + 1)
-    x = x or (uint32(b and 0x7F) shl s)
-    inc(s, 7)
-  result = (0'u32, 0)
 
 func load32(b: openArray[byte]): uint32 {.inline.} =
   result = uint32(b[0]) or
@@ -393,7 +366,7 @@ proc appendSnappyBytes*(s: OutputStream, src: openArray[byte]) =
     p = 0
 
   # The block starts with the varint-encoded length of the decompressed bytes.
-  s.writeVarint lenU32
+  s.write lenU32.toBytes(Leb128).toOpenArray()
 
   while lenU32 > maxBlockSize.uint32:
     s.encodeBlock src.toOpenArray(p, p + maxBlockSize)
@@ -413,7 +386,7 @@ proc snappyCompress*(input: InputStream, output: OutputStream) =
     if inputLen.isSome:
       let lenU32 = checkInputLen(inputLen.get)
       output.ensureRunway maxCompressedLen(lenU32)
-      output.writeVarint lenU32
+      output.write lenU32.toBytes(Leb128).toOpenArray()
     else:
       # TODO: This is a temporary limitation
       doAssert false, "snappy requires an input stream with a known length"
@@ -439,7 +412,7 @@ func encode*(src: openarray[byte]): seq[byte] =
     output.getOutput
 
 func decode*(src: openArray[byte], maxSize = 0xffffffff'u32): seq[byte] =
-  let (lenU32, bytesRead) = readVarint(src)
+  let (lenU32, bytesRead) = uint32.fromBytes(src, Leb128)
   if bytesRead <= 0 or lenU32 > maxSize:
     return
 
@@ -453,7 +426,7 @@ func decode*(src: openArray[byte], maxSize = 0xffffffff'u32): seq[byte] =
     if errCode != 0: result = @[]
 
 proc snappyUncompress*(src: openArray[byte], dst: var openArray[byte]): uint32 =
-  let (uncompressedLen, bytesRead) = readVarint(src)
+  let (uncompressedLen, bytesRead) = uint32.fromBytes(src, Leb128)
   if bytesRead <= 0 or uncompressedLen.BiggestUInt > dst.len.BiggestUInt:
     return 0
 
