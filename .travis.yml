@@ -20,7 +20,7 @@ install:
   - env MAKE="make -j2" bash build_nim.sh Nim csources dist/nimble NimBinaries
   - export PATH=$PWD/Nim/bin:$PATH
 
-  - git clone --depth 1 https://github.com/google/snappy snappycpp
+  - git clone --depth 1 --recursive https://github.com/google/snappy snappycpp
 
 script:
   - cd snappycpp

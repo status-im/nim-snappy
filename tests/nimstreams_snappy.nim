@@ -8,6 +8,8 @@ const
   tagCopy4*   = 0x03
 
   inputMargin = 16 - 1
+  
+  maxHashTableBits = 14
 
 proc writeByte(s: Stream, x: byte) {.inline.} =
   s.writeData(unsafeAddr x, 1)
@@ -149,8 +151,8 @@ when false:
       inc j
     result = j
 
-func hash(u, shift: uint32): uint32 =
-  result = (u * 0x1e35a7bd) shr shift
+func hash(bytes, mask: uint32): uint32 =
+  result = ((bytes * 0x1e35a7bd) shr (32 - maxHashTableBits)) and mask
 
 # encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
 # assumes that the varint-encoded length of the decompressed bytes has already
@@ -169,13 +171,12 @@ proc encodeBlock(output: Stream, src: openArray[byte]) =
     # checks.
     tableMask = maxTableSize - 1
 
-  var
-    shift = 32 - 8
-    tableSize = 1 shl 8
+  var tableSize = 1 shl 8
 
   while tableSize < maxTableSize and tableSize < src.len:
     tableSize = tableSize * 2
-    dec shift
+
+  let mask = (tableSize - 1).uint32
 
   # In Nim, all array elements are zero-initialized, so there is no advantage
   # to a smaller tableSize per se. However, it matches the C++ algorithm,
@@ -193,7 +194,7 @@ proc encodeBlock(output: Stream, src: openArray[byte]) =
   # The encoded form must start with a literal, as there are no previous
   # bytes to copy, so we start looking for hash matches at s == 1.
   var s = 1
-  var nextHash = hash(load32(src, s), shift.uint32)
+  var nextHash = hash(load32(src, s), mask)
 
   template emitRemainder(): untyped =
     if nextEmit < src.len:
@@ -230,7 +231,7 @@ proc encodeBlock(output: Stream, src: openArray[byte]) =
 
       candidate = int(table[nextHash and tableMask])
       table[nextHash and tableMask] = uint16(s)
-      nextHash = hash(load32(src, nextS), shift.uint32)
+      nextHash = hash(load32(src, nextS), mask)
       if load32(src, s) == load32(src, candidate):
         break
 
@@ -274,13 +275,13 @@ proc encodeBlock(output: Stream, src: openArray[byte]) =
       # are faster as one load64 call (with some shifts) instead of
       # three load32 calls.
       var x = load64(src, s-1)
-      var prevHash = hash(uint32(x shr 0), shift.uint32)
+      var prevHash = hash(uint32(x shr 0), mask)
       table[prevHash and tableMask] = uint16(s - 1)
-      var currHash = hash(uint32(x shr 8), shift.uint32)
+      var currHash = hash(uint32(x shr 8), mask)
       candidate = int(table[currHash and tableMask])
       table[currHash and tableMask] = uint16(s)
       if uint32(x shr 8) != load32(src, candidate):
-        nextHash = hash(uint32(x shr 16), shift.uint32)
+        nextHash = hash(uint32(x shr 16), mask)
         inc s
         break
 
