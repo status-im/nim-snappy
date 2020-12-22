@@ -1,0 +1,3 @@
+[submodule "tests/snappycpp"]
+	path = tests/snappycpp
+	url = https://github.com/google/snappy
