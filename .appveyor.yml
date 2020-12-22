@@ -28,17 +28,19 @@ install:
   - env MAKE="mingw32-make -j2" ARCH_OVERRIDE=%PLATFORM% bash build_nim.sh Nim csources dist/nimble NimBinaries
   - SET PATH=%CD%\Nim\bin;%PATH%
 
-  - git clone --depth 1 https://github.com/google/snappy snappycpp
-
 build_script:
-  - cd snappycpp
+  - SET SNAPPY_PATH=C:\projects\%APPVEYOR_PROJECT_SLUG%
+  - cd %SNAPPY_PATH%
+  - git submodule update --init --recursive
+  - cd tests\snappycpp
+  - dir
   - mkdir build
   - cd build
   - cmake -E env CXXFLAGS="-w" cmake .. -G "MinGW Makefiles" -DCMAKE_IGNORE_PATH="C:/Program Files/Git/usr/bin"
   - mingw32-make
-  - copy libsnappy.a C:\projects\%APPVEYOR_PROJECT_SLUG%\tests
+  - copy libsnappy.a %SNAPPY_PATH%\tests
 
-  - cd C:\projects\%APPVEYOR_PROJECT_SLUG%
+  - cd %SNAPPY_PATH%
   - nimble install -y
 
 test_script:
