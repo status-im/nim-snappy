@@ -31,7 +31,7 @@ install:
 build_script:
   - SET SNAPPY_PATH=C:\projects\%APPVEYOR_PROJECT_SLUG%
   - cd %SNAPPY_PATH%
-  - git submodule update --recursive
+  - git submodule update --init --recursive
   - cd tests\snappycpp
   - dir
   - mkdir build

@@ -20,7 +20,7 @@ install:
   - env MAKE="make -j2" bash build_nim.sh Nim csources dist/nimble NimBinaries
   - export PATH=$PWD/Nim/bin:$PATH
 
-  - git submodule update --recursive
+  - git submodule update --init --recursive
 
 script:
   - cd tests/snappycpp
