@@ -11,7 +11,26 @@ requires "nim >= 0.19.0",
          "faststreams",
          "stew"
 
+### Helper functions
+proc test(env, path: string) =
+  # Compilation language is controlled by TEST_LANG
+  var lang = "c"
+  if existsEnv"TEST_LANG":
+    lang = getEnv"TEST_LANG"
+
+  when defined(macosx):
+    # nim bug, incompatible pointer assignment
+    # see nim-lang/Nim#16123
+    if lang == "cpp":
+      lang = "c"
+
+  if not dirExists "build":
+    mkDir "build"
+
+  exec "nim " & lang & " " & env &
+    " -r --hints:off --warnings:off " & path
+
 task test, "Run all tests":
-  exec "nim c -d:debug -r tests/all_tests"
-  exec "nim c -d:release -r tests/all_tests"
-  exec "nim c --threads:on -d:release -r tests/all_tests"
+  test "-d:debug", "tests/all_tests"
+  test "-d:release", "tests/all_tests"
+  test "--threads:on -d:release", "tests/all_tests"
