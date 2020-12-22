@@ -33,7 +33,6 @@ build_script:
   - cd %SNAPPY_PATH%
   - git submodule update --init --recursive
   - cd tests\snappycpp
-  - dir
   - mkdir build
   - cd build
   - cmake -E env CXXFLAGS="-w" cmake .. -G "MinGW Makefiles" -DCMAKE_IGNORE_PATH="C:/Program Files/Git/usr/bin"
