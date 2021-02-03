@@ -1,5 +1,5 @@
 import
-  stew/[leb128, ranges/ptr_arith],
+  stew/[leb128, ranges/ptr_arith, arrayops, endians2],
   faststreams/[inputs, outputs, buffers, multisync],
   snappy/types
 
@@ -13,28 +13,6 @@ const
   tagCopy4*   = 0x03
 
   inputMargin = 16 - 1
-
-func load32(b: openArray[byte]): uint32 {.inline.} =
-  result = uint32(b[0]) or
-    (uint32(b[1]) shl 8 ) or
-    (uint32(b[2]) shl 16) or
-    (uint32(b[3]) shl 24)
-
-func load32(b: openArray[byte], i: int): uint32 =
-  result = load32(b.toOpenArray(i, i + 4 - 1))
-
-func load64(b: openArray[byte]): uint64 {.inline.} =
-  result = uint64(b[0]) or
-    (uint64(b[1]) shl 8 ) or
-    (uint64(b[2]) shl 16) or
-    (uint64(b[3]) shl 24) or
-    (uint64(b[4]) shl 32) or
-    (uint64(b[5]) shl 40) or
-    (uint64(b[6]) shl 48) or
-    (uint64(b[7]) shl 56)
-
-func load64(b: openArray[byte], i: int): uint64 =
-  result = load64(b.toOpenArray(i, i + 8 - 1))
 
 # emitLiteral writes a literal chunk.
 #
@@ -154,7 +132,7 @@ proc encodeBlock(output: OutputStream, src: openArray[byte]) =
   # The encoded form must start with a literal, as there are no previous
   # bytes to copy, so we start looking for hash matches at s == 1.
   var s = 1
-  var nextHash = hash(load32(src, s), shift.uint32)
+  var nextHash = hash(fromBytesLE(uint32, src.toOpenArray(s, s+3)), shift.uint32)
 
   template emitRemainder(): untyped =
     if nextEmit < src.len:
@@ -191,8 +169,8 @@ proc encodeBlock(output: OutputStream, src: openArray[byte]) =
 
       candidate = int(table[nextHash and tableMask])
       table[nextHash and tableMask] = uint16(s)
-      nextHash = hash(load32(src, nextS), shift.uint32)
-      if load32(src, s) == load32(src, candidate):
+      nextHash = hash(fromBytesLE(uint32, src.toOpenArray(nextS, nextS+3)), shift.uint32)
+      if fromBytesLE(uint32, src.toOpenArray(s, s+3)) == fromBytesLE(uint32, src.toOpenArray(candidate, candidate+3)):
         break
 
     # A 4-byte match has been found. We'll later see if more than 4 bytes
@@ -234,13 +212,13 @@ proc encodeBlock(output: OutputStream, src: openArray[byte]) =
       # at s+1. At least on ARCH=amd64, these three hash calculations
       # are faster as one load64 call (with some shifts) instead of
       # three load32 calls.
-      var x = load64(src, s-1)
-      var prevHash = hash(uint32(x shr 0), shift.uint32)
+      let x = fromBytesLE(uint64, src.toOpenArray(s-1, src.len-1))
+      let prevHash = hash(uint32(x shr 0), shift.uint32)
       table[prevHash and tableMask] = uint16(s - 1)
-      var currHash = hash(uint32(x shr 8), shift.uint32)
+      let currHash = hash(uint32(x shr 8), shift.uint32)
       candidate = int(table[currHash and tableMask])
       table[currHash and tableMask] = uint16(s)
-      if uint32(x shr 8) != load32(src, candidate):
+      if uint32(x shr 8) != fromBytesLE(uint32, src.toOpenArray(candidate, candidate+3)):
         nextHash = hash(uint32(x shr 16), shift.uint32)
         inc s
         break
@@ -290,7 +268,7 @@ func decode(dst: var openArray[byte], src: openArray[byte]): int =
       if (length > (dst.len-d)) or (length > (src.len-s)):
         return decodeErrCodeCorrupt
 
-      copyMem(addr dst[d], unsafeAddr src[s], length)
+      dst[d..<d+length] = src.toOpenArray(s, s+length-1)
       inc(d, length)
       inc(s, length)
       continue
@@ -326,7 +304,7 @@ func decode(dst: var openArray[byte], src: openArray[byte]): int =
     # forwards, even if the slices overlap. Conceptually, this is:
     #
     # d += forwardCopy(dst[d:d+length], dst[d-offset:])
-    var stop = d + length
+    let stop = d + length
     while d != stop:
       dst[d] = dst[d-offset]
       inc d
