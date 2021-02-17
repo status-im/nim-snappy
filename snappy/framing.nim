@@ -1,8 +1,7 @@
 import
   faststreams/[inputs, outputs, multisync],
-  stew/endians2,
-  ../snappy, types,
-  ../tests/openarrays_snappy as oas
+  stew/[endians2, leb128, arrayops],
+  ../snappy, types, ./encoder
 
 export
   types
@@ -103,8 +102,13 @@ proc framingFormatUncompress*(input: openarray[byte]): seq[byte] =
 proc processFrame*(output: OutputStream, dst: var openArray[byte], src: openArray[byte]) =
   let
     crc = masked_crc32c(src[0].unsafeAddr, src.len.uint)
-    varintLen = oas.putUvarint(dst, src.len.uint64)
-    encodedLen = oas.encodeBlock(dst.toOpenArray(varintLen, dst.len-1), src) + varintLen
+    leb128 = uint32(src.len).toBytes(Leb128)
+    varintLen = int(leb128.len)
+
+  dst[0..<varintLen] = leb128.toOpenArray()
+
+  let
+    encodedLen = encoder.encodeBlock(dst, varintLen, src) + varintLen
 
   if encodedLen >= (src.len - (src.len div 8)):
     let frameLen = src.len + 4 # include 4 bytes crc
