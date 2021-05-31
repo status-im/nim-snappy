@@ -3,7 +3,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/g4y9874tx0biv3t1/branch/master?svg=true)](https://ci.appveyor.com/project/nimbus/nim-snappy/branch/master)
 ![nimble](https://img.shields.io/badge/available%20on-nimble-yellow.svg?style=flat-square)
 ![license](https://img.shields.io/github/license/citycide/cascade.svg?style=flat-square)
-![Github action](https://github.com/status-im/nim-snappy/workflows/nim-snappy%20CI/badge.svg)
+![Github action](https://github.com/status-im/nim-snappy/workflows/CI/badge.svg)
 
 Nim implementation of Snappy compression algorithm
 
