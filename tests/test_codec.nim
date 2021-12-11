@@ -15,6 +15,7 @@ const
 type
   TestTimes = object
     fastStreams: int
+    appendSnappyBytes: int
     openArrays: int
     nimStreams: int
     cppLib: int
@@ -55,6 +56,12 @@ proc timedRoundTrip(msg: string, source: openarray[byte]): (bool, TestTimes) =
   timeit(timers.fastStreams):
     var encodedWithFastStreams = snappy.encode(source)
 
+  timeit(timers.appendSnappyBytes):
+    var encodedWithAppendSnappyBytes = block:
+      let output = memoryOutput()
+      snappy.appendSnappyBytes(output, source)
+      output.getOutput
+
   timeit(timers.nimStreams):
     var encodedWithNimStreams = nimstreams_snappy.encode(source)
 
@@ -85,6 +92,11 @@ proc timedRoundTrip(msg: string, source: openarray[byte]): (bool, TestTimes) =
     ok = encodedWithOpenArrays == encodedWithFastStreams
     if not ok:
       echo "OpenArray and FastStreams implementations disagree"
+
+  if ok:
+    ok = encodedWithOpenArrays == encodedWithAppendSnappyBytes
+    if not ok:
+      echo "OpenArray and AppendSnappyBytes implementations disagree"
 
   if ok:
     ok = encodedWithOpenArrays == encodedWithNimStreams
@@ -219,6 +231,13 @@ suite "snappy":
         buf[j] = byte((j mod 10) + int('a'))
       check roundTrip("buf " & $buf.len, buf)
       inc(i, 23)
+
+    for m in 1 .. 5:
+      for i in m * maxBlockSize - 5 .. m * maxBlockSize + 5:
+        var buf = newSeq[byte](i)
+        for j in 0..<buf.len:
+          buf[j] = byte((j mod 10) + int('a'))
+        check roundTrip("buf " & $buf.len, buf)
 
     block:
       let encoded = [27'u8, 0b000010_00, 1, 2, 3, 0b000_000_10, 3, 0,

@@ -345,18 +345,19 @@ proc appendSnappyBytes*(s: OutputStream, src: openArray[byte]) =
 
   # The block starts with the varint-encoded length of the decompressed bytes.
   s.write lenU32.toBytes(Leb128).toOpenArray()
+  if lenU32 <= 0: return
 
   while lenU32 > maxBlockSize.uint32:
-    s.encodeBlock src.toOpenArray(p, p + maxBlockSize)
+    s.encodeBlock src.toOpenArray(p, p + maxBlockSize - 1)
     p += maxBlockSize
     lenU32 -= maxBlockSize.uint32
 
   # The `lenU32.int` expressions below cannot overflow because
   # `lenU32` is already less than `maxBlockSize` here:
   if lenU32 < minNonLiteralBlockSize.uint32:
-    s.emitLiteral src.toOpenArray(p, p + lenU32.int)
+    s.emitLiteral src.toOpenArray(p, p + lenU32.int - 1)
   else:
-    s.encodeBlock src.toOpenArray(p, p + lenU32.int)
+    s.encodeBlock src.toOpenArray(p, p + lenU32.int - 1)
 
 proc snappyCompress*(input: InputStream, output: OutputStream) =
   try:
