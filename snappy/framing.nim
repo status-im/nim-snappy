@@ -99,7 +99,7 @@ proc framingFormatUncompress*(input: InputStream): seq[byte] =
 proc framingFormatUncompress*(input: openarray[byte]): seq[byte] =
   framingFormatUncompress unsafeMemoryInput(input)
 
-proc processFrame*(output: OutputStream, dst: var openArray[byte], src: openArray[byte]) =
+proc processFrame(output: OutputStream, dst: var openArray[byte], src: openArray[byte]) =
   let
     crc = masked_crc32c(src[0].unsafeAddr, src.len.uint)
     leb128 = uint32(src.len).toBytes(Leb128)
@@ -108,7 +108,11 @@ proc processFrame*(output: OutputStream, dst: var openArray[byte], src: openArra
   dst[0..<varintLen] = leb128.toOpenArray()
 
   let
-    encodedLen = encoder.encodeBlock(dst, varintLen, src) + varintLen
+    encodedLen =
+      if src.len >= minNonLiteralBlockSize:
+        encoder.encodeBlock(dst, varintLen, src) + varintLen
+      else:
+        src.len
 
   if encodedLen >= (src.len - (src.len div 8)):
     let frameLen = src.len + 4 # include 4 bytes crc
@@ -146,4 +150,3 @@ proc framingFormatCompress*(src: openArray[byte]): seq[byte] =
   var output = memoryOutput()
   framingFormatCompress(output, src)
   return output.getOutput
-

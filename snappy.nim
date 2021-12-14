@@ -331,7 +331,7 @@ func decode(dst: var openArray[byte], src: openArray[byte]): int =
 # optimization. It should not affect the encoded form. This is tested by
 # TestSameEncodingAsCppShortCopies.
 const
-  minNonLiteralBlockSize = 1 + 1 + inputMargin
+  minNonLiteralBlockSize* = 1 + 1 + inputMargin
 
 # Encode returns the encoded form of src. The returned slice may be a sub-
 # slice of dst if dst was large enough to hold the entire encoded block.
@@ -417,4 +417,3 @@ proc snappyUncompress*(src: openArray[byte], dst: var openArray[byte]): uint32 =
       return 0
 
   return uncompressedLen
-
