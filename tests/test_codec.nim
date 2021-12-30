@@ -3,41 +3,13 @@
 import
   os, unittest, terminal, strutils,
   faststreams,
-  snappy, randgen, openarrays_snappy, nimstreams_snappy
+  snappy, randgen, openarrays_snappy, nimstreams_snappy, cpp_snappy
 
 include system/timers
 
 const
   currentDir = currentSourcePath.parentDir
-
-{.passl: "-lsnappy -L\"" & currentDir & "\" -lstdc++".}
-
-type
-  TestTimes = object
-    fastStreams: int
-    appendSnappyBytes: int
-    openArrays: int
-    nimStreams: int
-    cppLib: int
-
-template timeit(timerVar: var Nanos, code: untyped) =
-  let t0 = getTicks()
-  code
-  timerVar = int(getTicks() - t0) div 1000000
-
-proc printTimes(t: TestTimes) =
-  styledEcho "  cpu time [OpenArrays]: ", styleBright, $t.openArrays, "ms"
-  styledEcho "  cpu time [FastStream]: ", styleBright, $t.fastStreams, "ms"
-  styledEcho "  cpu time [NimStreams]: ", styleBright, $t.nimStreams, "ms"
-  styledEcho "  cpu time [C++ Snappy]: ", styleBright, $t.cppLib, "ms"
-
-proc snappy_compress(input: cstring, input_length: csize_t, compressed: cstring, compressed_length: var csize_t): cint {.importc, cdecl.}
-proc snappy_uncompress(compressed: cstring, compressed_length: csize_t, uncompressed: cstring, uncompressed_length: var csize_t): cint {.importc, cdecl.}
-proc snappy_max_compressed_length(source_length: csize_t): csize_t {.importc, cdecl.}
-proc snappy_uncompressed_length(compressed: cstring, compressed_length: csize_t, res: var csize_t): cint {.importc, cdecl.}
-
-const
-  testDataDir = "data" & DirSep
+  dataDir = currentDir & DirSep & "data" & DirSep
 
 let
   empty: seq[byte] = @[]
@@ -51,121 +23,51 @@ proc readSource(sourceName: string): seq[byte] =
   doAssert(size == f.readBytes(result, 0, size))
   f.close()
 
-proc timedRoundTrip(msg: string, source: openarray[byte]): (bool, TestTimes) =
-  var timers: TestTimes
-  timeit(timers.fastStreams):
-    var encodedWithFastStreams = snappy.encode(source)
+proc roundTrip(msg: string, source: openarray[byte]) =
+  var encodedWithFastStreams = snappy.encode(source)
+  var encodedWithAppendSnappyBytes = block:
+    let output = memoryOutput()
+    snappy.appendSnappyBytes(output, source)
+    output.getOutput
 
-  timeit(timers.appendSnappyBytes):
-    var encodedWithAppendSnappyBytes = block:
-      let output = memoryOutput()
-      snappy.appendSnappyBytes(output, source)
-      output.getOutput
+  var encodedWithNimStreams = nimstreams_snappy.encode(source)
+  var encodedWithOpenArrays = openarrays_snappy.encode(source)
 
-  timeit(timers.nimStreams):
-    var encodedWithNimStreams = nimstreams_snappy.encode(source)
+  # Test that everything can decode with C++ snappy - there may be minor
+  # differences in encoding however!
+  check:
+    snappy.decode(encodedWithFastStreams) == source
+    cpp_snappy.decode(encodedWithFastStreams) == source
 
-  timeit(timers.openArrays):
-    var encodedWithOpenArrays = openarrays_snappy.encode(source)
+    snappy.decode(encodedWithAppendSnappyBytes) == source
+    cpp_snappy.decode(encodedWithAppendSnappyBytes) == source
 
-  var
-    encodedWithCpp = newString(snappy_max_compressed_length(source.len.csize_t))
-    outputSize = csize_t encodedWithCpp.len
+    nimstreams_snappy.decode(encodedWithNimStreams) == source
+    cpp_snappy.decode(encodedWithNimStreams) == source
 
-  timeit(timers.cppLib):
-    var success = if source.len > 0:
-      snappy_compress(cast[cstring](source[0].unsafeAddr), source.len.csize_t, encodedWithCpp[0].addr, outputSize)
-    else:
-      snappy_compress(cast[cstring](0), source.len.csize_t, encodedWithCpp[0].addr, outputSize)
+    openarrays_snappy.decode(encodedWithOpenArrays) == source
+    cpp_snappy.decode(encodedWithOpenArrays) == source
 
-  var ok = success == 0
-  if not ok: echo "cpp_compress failed"
-
-  ok = outputSize == encodedWithOpenArrays.len.csize_t
-  if not ok: echo "cpp output size and nim output size differ"
-
-  if ok:
-    ok = equalMem(encodedWithOpenArrays[0].addr, encodedWithCpp[0].addr, outputSize.int)
-    if not ok: echo "cpp output and nim output differ"
-
-  if ok:
-    ok = encodedWithOpenArrays == encodedWithFastStreams
-    if not ok:
-      echo "OpenArray and FastStreams implementations disagree"
-
-  if ok:
-    ok = encodedWithOpenArrays == encodedWithAppendSnappyBytes
-    if not ok:
-      echo "OpenArray and AppendSnappyBytes implementations disagree"
-
-  if ok:
-    ok = encodedWithOpenArrays == encodedWithNimStreams
-    if not ok:
-      echo "OpenArray and NimStreams implementations disagree"
-
-  if ok:
-    ok = snappy.decode(encodedWithOpenArrays) == source
-    if not ok: echo "roundtrip failure"
-
-  if ok:
-    stdout.styledWriteLine("  ", msg, "...", fgGreen, "[PASS]")
-  else:
-    stdout.styledWriteLine("  ", msg, "...", fgRed, "[FAILED]")
-
-  (ok, timers)
-
-proc roundTrip(msg: string, source: openArray[byte]): bool =
-  timedRoundTrip(msg, source)[0]
-
-proc roundTrip(msg: string, sourceName: string): bool =
-  var src = readSource(sourceName)
-  roundTrip(msg, src)
-
-proc timedRoundTrip(msg: string, sourceName: string): auto =
-  var src = readSource(sourceName)
-  timedRoundTrip(msg, src)
-
-proc roundTripRev(msg: string, source: openArray[byte]): bool =
+proc roundTripRev(msg: string, source: openArray[byte]) =
   var
     decoded = snappy.decode(source)
     outputSize: csize_t = 0
     ok = snappy_uncompressed_length(cast[cstring](source[0].unsafeAddr), source.len.csize_t, outputSize) == 0
-    cpp_decoded: string
+    cpp_decoded = cpp_snappy.decode(source)
 
-  if not ok: echo "maybe a bad data"
+  check:
+    decoded == cpp_decoded
 
-  if ok:
-    cpp_decoded = newString(outputSize)
-    ok = snappy_uncompress(cast[cstring](source[0].unsafeAddr), source.len.csize_t, cpp_decoded, outputSize) == 0
-    if not ok: echo "cpp failed to uncompress"
-
-  if ok:
-    ok = equalMem(decoded[0].addr, cpp_decoded[0].addr, outputSize.int)
-    if not ok: echo "cpp output and nim output differ"
-
-  if ok:
-    ok = snappy.encode(decoded) == source
-    if not ok: echo "rev roundtrip failure"
-
-  if ok:
-    stdout.styledWriteLine("  ", msg, "...", fgGreen, "[PASS]")
-  else:
-    stdout.styledWriteLine("  ", msg, "...", fgRed, "[FAILED]")
-
-  result = ok
-
-proc roundTripRev(msg: string, sourceName: string): bool =
+proc roundTripRev(msg: string, sourceName: string) =
   var src = readSource(sourceName)
   roundTripRev(msg, src)
 
+proc roundTrip(msg: string, sourceName: string) =
+  var src = readSource(sourceName)
+  roundTrip(msg, src)
+
 template toBytes(s: string): auto =
   toOpenArrayByte(s, 0, s.len-1)
-
-proc compressFileWithFaststreams(src, dst: string) =
-  var input = memFileInput(src)
-  var output = fileOutput(dst)
-  output.appendSnappyBytes input.read(input.len.get)
-  output.flush()
 
 when false:
   # TODO: This is not tested yet
@@ -177,59 +79,35 @@ when false:
     output.appendSnappyBytes input, getFileSize(src).int
 
 suite "snappy":
-  let
-    dataDir = getAppDir() & DirSep & testDataDir
-    largeFile = dataDir / "largefile.bin"
-
-  if fileExists(largeFile):
-    test "test large file performance":
-      let (success, times) = timedRoundTrip("empty", largeFile)
-      printTimes times
-      check success and float64(times.fastStreams) < float64(times.openArrays) * 1.1
-
-    let
-      largeFileCopy1 = dataDir / "largefile.bin.copy.1"
-      largeFileCopy2 = dataDir / "largefile.bin.copy.2"
-
-    var time = 0
-    timeit(time): compressFileWithFaststreams(largeFile, largeFileCopy1)
-    styledEcho "  compress file [Faststreams]: ", styleBright, $time, "ms"
-
-    timeit(time): compressFileWithFaststreams(largeFile, largeFileCopy2)
-    styledEcho "  compress file [Faststreams]: ", styleBright, $time, "ms"
-
-    removeFile largeFileCopy1
-    removeFile largeFileCopy2
-
   test "basic roundtrip test":
-    check roundTrip("empty", empty)
-    check roundTrip("oneZero", oneZero)
-    check roundTrip("data_html",    dataDir & "html")
-    check roundTrip("data_urls",    dataDir & "urls.10K")
-    check roundTrip("data_jpg",     dataDir & "fireworks.jpeg")
-    check roundTrip("data_pdf",     dataDir & "paper-100k.pdf")
-    check roundTrip("data_html4",   dataDir & "html_x_4")
-    check roundTrip("data_txt1",    dataDir & "alice29.txt")
-    check roundTrip("data_txt2",    dataDir & "asyoulik.txt")
-    check roundTrip("data_txt3",    dataDir & "lcet10.txt")
-    check roundTrip("data_txt4",    dataDir & "plrabn12.txt")
-    check roundTrip("data_pb",      dataDir & "geo.protodata")
-    check roundTrip("data_gaviota", dataDir & "kppkn.gtb")
-    check roundTrip("data_golden",  dataDir & "Mark.Twain-Tom.Sawyer.txt")
-    check roundTripRev("data_golden_rev", dataDir & "Mark.Twain-Tom.Sawyer.txt.rawsnappy")
+    roundTrip("empty", empty)
+    roundTrip("oneZero", oneZero)
+    roundTrip("data_html",    dataDir & "html")
+    roundTrip("data_urls",    dataDir & "urls.10K")
+    roundTrip("data_jpg",     dataDir & "fireworks.jpeg")
+    roundTrip("data_pdf",     dataDir & "paper-100k.pdf")
+    roundTrip("data_html4",   dataDir & "html_x_4")
+    roundTrip("data_txt1",    dataDir & "alice29.txt")
+    roundTrip("data_txt2",    dataDir & "asyoulik.txt")
+    roundTrip("data_txt3",    dataDir & "lcet10.txt")
+    roundTrip("data_txt4",    dataDir & "plrabn12.txt")
+    roundTrip("data_pb",      dataDir & "geo.protodata")
+    roundTrip("data_gaviota", dataDir & "kppkn.gtb")
+    roundTrip("data_golden",  dataDir & "Mark.Twain-Tom.Sawyer.txt")
+    roundTripRev("data_golden_rev", dataDir & "Mark.Twain-Tom.Sawyer.txt.rawsnappy")
 
   test "misc test":
     for i in 1..32:
       let x = repeat("b", i)
       let y = "aaaa$1aaaabbbb" % [x]
-      check roundTrip("repeat " & $i, toBytes(y))
+      roundTrip("repeat " & $i, toBytes(y))
 
     var i = 1
     while i < 20_000:
       var buf = newSeq[byte](i)
       for j in 0..<buf.len:
         buf[j] = byte((j mod 10) + int('a'))
-      check roundTrip("buf " & $buf.len, buf)
+      roundTrip("buf " & $buf.len, buf)
       inc(i, 23)
 
     for m in 1 .. 5:
@@ -237,7 +115,7 @@ suite "snappy":
         var buf = newSeq[byte](i)
         for j in 0..<buf.len:
           buf[j] = byte((j mod 10) + int('a'))
-        check roundTrip("buf " & $buf.len, buf)
+        roundTrip("buf " & $buf.len, buf)
 
     block:
       let encoded = [27'u8, 0b000010_00, 1, 2, 3, 0b000_000_10, 3, 0,
@@ -339,10 +217,10 @@ suite "snappy":
       0, 0, 1, 2, 0, 0, 1, 3, 0, 0, 1, 4, 0, 0, 2, 1, 0, 0, 0, 4, 0, 1, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-    check roundTrip("random1", random1)
-    check roundTrip("random2", random2)
-    check roundTrip("random3", random3)
-    check roundTrip("random4", random4)
+    roundTrip("random1", random1)
+    roundTrip("random2", random2)
+    roundTrip("random3", random3)
+    roundTrip("random4", random4)
 
     const
       listLen = 100
@@ -350,4 +228,4 @@ suite "snappy":
       maxStringSize = 10000
 
     for x in randList(string, randGen(minStringSize, maxStringSize), randGen(listLen, listLen)):
-      check roundTrip("random " & $x.len, toBytes(x))
+      roundTrip("random " & $x.len, toBytes(x))
