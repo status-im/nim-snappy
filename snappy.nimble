@@ -28,9 +28,10 @@ proc test(env, path: string) =
     mkDir "build"
 
   exec "nim " & lang & " " & env &
-    " -r --hints:off --skipParentCfg " & path
+    " --hints:off --skipParentCfg " & path
 
 task test, "Run all tests":
-  test "-d:debug", "tests/all_tests"
-  test "-d:release", "tests/all_tests"
-  test "--threads:on -d:release", "tests/all_tests"
+  test "-d:debug -r", "tests/all_tests"
+  test "-d:release -r", "tests/all_tests"
+  test "--threads:on -d:release -r", "tests/all_tests"
+  test "", "tests/benchmark" # don't run
