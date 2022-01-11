@@ -12,22 +12,11 @@ requires "nim >= 0.19.0",
          "stew"
 
 ### Helper functions
-proc test(env, path: string) =
-  # Compilation language is controlled by TEST_LANG
-  var lang = "c"
-  if existsEnv"TEST_LANG":
-    lang = getEnv"TEST_LANG"
-
-  when defined(macosx):
-    # nim bug, incompatible pointer assignment
-    # see nim-lang/Nim#16123
-    if lang == "cpp":
-      lang = "c"
-
+proc test(args, path: string) =
   if not dirExists "build":
     mkDir "build"
 
-  exec "nim " & lang & " " & env &
+  exec "nim " & getEnv("TEST_LANG", "c") & " " & getEnv("NIMFLAGS") & " " & args &
     " --hints:off --skipParentCfg " & path
 
 task test, "Run all tests":
