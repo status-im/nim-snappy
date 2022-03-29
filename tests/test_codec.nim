@@ -1,8 +1,10 @@
 {.used.}
 
 import
-  os, unittest, terminal, strutils,
+  std/[os, strutils],
+  unittest2,
   faststreams,
+  ../snappy/codec,
   snappy, randgen, openarrays_snappy, nimstreams_snappy, cpp_snappy
 
 include system/timers
@@ -111,7 +113,7 @@ suite "snappy":
       inc(i, 23)
 
     for m in 1 .. 5:
-      for i in m * maxBlockSize - 5 .. m * maxBlockSize + 5:
+      for i in m * maxBlockSize.int - 5 .. m * maxBlockSize.int + 5:
         var buf = newSeq[byte](i)
         for j in 0..<buf.len:
           buf[j] = byte((j mod 10) + int('a'))

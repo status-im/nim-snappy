@@ -7,8 +7,9 @@ description   = "Nim implementation of snappy compression algorithm"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 0.19.0",
+requires "nim >= 1.2.0",
          "faststreams",
+         "unittest2",
          "stew"
 
 ### Helper functions
@@ -23,4 +24,4 @@ task test, "Run all tests":
   test "-d:debug -r", "tests/all_tests"
   test "-d:release -r", "tests/all_tests"
   test "--threads:on -d:release -r", "tests/all_tests"
-  test "", "tests/benchmark" # don't run
+  test "-d:release", "tests/benchmark" # don't run
