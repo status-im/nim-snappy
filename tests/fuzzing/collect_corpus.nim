@@ -1,7 +1,6 @@
 import
   os,
-  ../../snappy,
-  ../../snappy/framing
+  ../../snappy
 
 let
   fuzzingDir = getAppDir()

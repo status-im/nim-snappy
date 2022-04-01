@@ -1,38 +1,59 @@
 {.used.}
 
 import
-  std/os,
+  std/os, stew/byteutils,
   unittest2,
-  faststreams,
-  ../snappy/framing
+  ../snappy,
+  ../snappy/faststreams
 
 template check_uncompress(source, target: string) =
   test "uncompress " & source & " to " & target:
     var inStream = memFileInput(compDir & source)
     var outStream = memoryOutput()
 
-    uncompressFramedStream(inStream, outStream)
+    uncompressFramed(inStream, outStream)
 
-    let expected = readFile(uncompDir & target)
-    let actual = outStream.getOutput(string)
+    let expected = toBytes(readFile(uncompDir & target))
+    let actual = outStream.getOutput()
 
     if actual != expected:
       check false
     else:
       check true
 
+    let sourceData = toBytes(readFile(compDir & source))
+    if expected != decodeFramed(sourceData):
+      check false
+
+    var uncompressOut = newSeqUninitialized[byte](expected.len)
+    check:
+      uncompressFramed(sourceData, uncompressOut).expect(
+        "decompression worked") == (sourceData.len, expected.len)
+    if expected != uncompressOut:
+      check false
+
+    # Partial framed reads
+    uncompressOut = newSeq[byte](uncompressOut.len - 1)
+    let (read, written) = uncompressFramed(sourceData, uncompressOut).expect(
+        "decompression worked")
+    check:
+      read < sourceData.len
+      written < expected.len
+    if expected.toOpenArray(0, written - 1) != uncompressOut.toOpenArray(0, written - 1):
+      check false
+
 template check_roundtrip(source) =
   test "roundtrip " & source:
-    let expected = readFile(uncompDir & source)
+    let expected = toBytes(readFile(uncompDir & source))
     var ost = memoryOutput()
 
-    framingFormatCompress(ost, expected.toOpenArrayByte(0, expected.len-1))
-    let compressed = ost.getOutput(string)
+    compressFramed(expected, ost)
+    let compressed = ost.getOutput()
 
     var inst = memoryInput(compressed)
     var outst = memoryOutput()
-    uncompressFramedStream(inst, outst)
-    let actual = outst.getOutput(string)
+    uncompressFramed(inst, outst)
+    let actual = outst.getOutput()
     check actual.len == expected.len
 
     if actual != expected:

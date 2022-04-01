@@ -2,15 +2,16 @@
 
 import
   unittest2,
-  faststreams/inputs, ../snappy/framing
+  ../snappy
 
-proc parseInvalidInput(payload: openArray[byte]): bool =
-  try:
-    let input = unsafeMemoryInput(payload)
-    let decoded {.used.} = framingFormatUncompress(input)
-  except SnappyError:
-    result = true
+proc parseInvalidInput(payload: openArray[byte]) =
+  var tmp = newSeqUninitialized[byte](256)
+  check:
+    uncompress(payload, tmp).isErr()
+
+  let decoded {.used.} = decodeFramed(payload)
+  check: decoded.len == 0
 
 suite "invalid data":
   test "invalid header":
-    check parseInvalidInput([byte 3, 2, 1, 0])
+    parseInvalidInput([byte 3, 2, 1, 0])

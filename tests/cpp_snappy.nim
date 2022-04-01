@@ -39,8 +39,7 @@ proc decode*(input: openArray[byte]): seq[byte] =
 
   result = newSeqUninitialized[byte](bytes.int)
 
-
   if snappy_uncompress(
       cast[cstring](unsafeAddr input[0]), input.len().csize_t,
       cast[ptr cchar](result[0].addr), bytes) != 0:
-    raise (ref ValueError)(msg: "Cannot compress")
+    raise (ref ValueError)(msg: "Cannot uncompress")
