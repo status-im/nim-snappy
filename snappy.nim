@@ -115,7 +115,7 @@ func decode*(input: openArray[byte], maxSize = maxUncompressedLen): seq[byte] =
     return
 
   when sizeof(int) <= sizeof(uncompressed):
-    if compressed.uint64 > int.high.uint64:
+    if uncompressed.uint64 > int.high.uint64:
       return
 
   # TODO https://github.com/nim-lang/Nim/issues/19357
