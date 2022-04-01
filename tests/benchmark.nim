@@ -78,7 +78,7 @@ proc faststreamsDecodeFramed(input: openArray[byte]): seq[byte] =
   uncompressFramed(ins, outs)
   outs.getOutput() # This line is a hotspot due to missing RVO
 
-proc timedRoundTrip(msg: string, source: openarray[byte], iterations = 100) =
+proc timedRoundTrip(msg: string, source: openArray[byte], iterations = 100) =
   when declared(GC_fullCollect):
     GC_fullCollect()
 
@@ -113,7 +113,7 @@ proc timedRoundTrip(msg: string, source: openarray[byte], iterations = 100) =
 
   printTimes(timers, msg)
 
-proc timedRoundTripFramed(msg: string, source: openarray[byte], iterations = 100) =
+proc timedRoundTripFramed(msg: string, source: openArray[byte], iterations = 100) =
   when declared(GC_fullCollect):
     GC_fullCollect()
 

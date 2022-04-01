@@ -41,7 +41,7 @@ proc faststreamsEncode(input: openArray[byte]): seq[byte] =
   compress(ins, outs)
   outs.getOutput()
 
-proc roundTrip(msg: string, source: openarray[byte]) =
+proc roundTrip(msg: string, source: openArray[byte]) =
   var encodedWithSnappy = snappy.encode(source)
   var encodedWithFastStreams = faststreamsEncode(source)
   var encodedWithNimStreams = streamsEncode(source)

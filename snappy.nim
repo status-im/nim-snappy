@@ -121,9 +121,9 @@ func decode*(input: openArray[byte], maxSize = maxUncompressedLen): seq[byte] =
   # TODO https://github.com/nim-lang/Nim/issues/19357
   result = newSeqUninitialized[byte](int uncompressed)
   let written = uncompress(input, result).valueOr:
-    return # Empty return on error
+    return @[] # Empty return on error
   if written != result.len:
-    return # Header does not match content
+    return @[] # Header does not match content
 
 func compressFramed*(input: openArray[byte], output: var openArray[byte]):
     Result[int, FrameError] =
