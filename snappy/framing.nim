@@ -1,7 +1,8 @@
 import
   faststreams/[inputs, outputs, multisync],
   stew/[endians2, leb128, arrayops],
-  ../snappy, types, ./encoder
+  ../snappy,
+  "."/[codec, encoder_oa, types]
 
 export
   types
@@ -31,13 +32,16 @@ const
   # maximum uncompressed data length excluding checksum
   MAX_UNCOMPRESSED_DATA_LEN*    = 65536
   # maximum uncompressed data length excluding checksum
-  MAX_COMPRESSED_DATA_LEN*      = int maxCompressedLen(MAX_UNCOMPRESSED_DATA_LEN)
+  MAX_COMPRESSED_DATA_LEN*      =
+    int maxCompressedLen(MAX_UNCOMPRESSED_DATA_LEN).expect(
+      "framed blocks always small enough")
 
   COMPRESSED_DATA_IDENTIFIER*   = 0x00
   UNCOMPRESSED_DATA_IDENTIFIER* = 0x01
   STREAM_IDENTIFIER*            = 0xff
 
-  STREAM_HEADER*                = "\xff\x06\x00\x00sNaPpY"
+  STREAM_HEADER*                = [
+      byte 0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59]
 
 proc uncompressFramedStream*(
     input: InputStream, output: OutputStream) {.
@@ -46,7 +50,7 @@ proc uncompressFramedStream*(
     if not input.readable(STREAM_HEADER.len):
       raise newException(UnexpectedEofError, "Failed to read stream header")
 
-    if input.read(STREAM_HEADER.len) != STREAM_HEADER.toOpenArrayByte(0, STREAM_HEADER.len-1):
+    if input.read(STREAM_HEADER.len) != STREAM_HEADER:
       raise newException(MalformedSnappyData, "Invalid header value")
 
     var uncompressedData = newSeq[byte](MAX_UNCOMPRESSED_DATA_LEN)
@@ -122,7 +126,7 @@ proc processFrame(
   let
     encodedLen =
       if src.len >= minNonLiteralBlockSize:
-        encoder.encodeBlock(dst, varintLen, src) + varintLen
+        encodeBlock(dst, varintLen, src) + varintLen
       else:
         src.len
 

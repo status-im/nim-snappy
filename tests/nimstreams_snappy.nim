@@ -1,13 +1,6 @@
 import
-  streams
-
-const
-  tagLiteral* = 0x00
-  tagCopy1*   = 0x01
-  tagCopy2*   = 0x02
-  tagCopy4*   = 0x03
-
-  inputMargin = 16 - 1
+  streams,
+  ../snappy/codec
 
 proc writeByte(s: Stream, x: byte) {.inline.} =
   s.writeData(unsafeAddr x, 1)
@@ -133,24 +126,6 @@ proc emitCopy(s: Stream, offset, length: int) =
 
   s.writeByte byte((((offset shr 8) shl 5) or ((length-4) shl 2) or tagCopy1) and 0xFF)
   s.writeByte byte(offset and 0xFF)
-
-when false:
-  # extendMatch returns the largest k such that k <= len(src) and that
-  # src[i:i+k-j] and src[j:k] have the same contents.
-  #
-  # It assumes that:
-  #  0 <= i and i < j and j <= len(src)
-  func extendMatch(src: openArray[byte], i, j: int): int =
-    var
-      i = i
-      j = j
-    while j < src.len and src[i] == src[j]:
-      inc i
-      inc j
-    result = j
-
-func hash(u, shift: uint32): uint32 =
-  result = (u * 0x1e35a7bd) shr shift
 
 # encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
 # assumes that the varint-encoded length of the decompressed bytes has already
@@ -374,122 +349,64 @@ func decode(dst, src: var openArray[byte]): int =
     return decodeErrCodeCorrupt
   return 0
 
-# MaxEncodedLen returns the maximum length of a snappy block, given its
-# uncompressed length.
-#
-# It will return a zero value if srcLen is too large to encode.
-func maxEncodedLen(srcLen: int): int =
-  var n = uint64(srcLen)
-  if n > 0xffffffff'u64:
-    return 0
-
-  # Compressed data can be defined as:
-  #    compressed := item* literal*
-  #    item       := literal* copy
-  #
-  # The trailing literal sequence has a space blowup of at most 62/60
-  # since a literal of length 60 needs one tag byte + one extra byte
-  # for length information.
-  #
-  # Item blowup is trickier to measure. Suppose the "copy" op copies
-  # 4 bytes of data. Because of a special check in the encoding code,
-  # we produce a 4-byte copy only if the offset is < 65536. Therefore
-  # the copy op takes 3 bytes to encode, and this type of item leads
-  # to at most the 62/60 blowup for representing literals.
-  #
-  # Suppose the "copy" op copies 5 bytes of data. If the offset is big
-  # enough, it will take 5 bytes to encode the copy op. Therefore the
-  # worst case here is a one-byte literal followed by a five-byte copy.
-  # That is, 6 bytes of input turn into 7 bytes of "compressed" data.
-  #
-  # This last factor dominates the blowup, so the final estimate is:
-  n = 32'u64 + n + n div 6'u64
-  if n > 0xffffffff'u64:
-    return 0
-
-  result = int(n)
-
-const
-  maxBlockSize = 65536
-
-# minNonLiteralBlockSize is the minimum size of the input to encodeBlock that
-# could be encoded with a copy tag. This is the minimum with respect to the
-# algorithm used by encodeBlock, not a minimum enforced by the file format.
-#
-# The encoded output must start with at least a 1 byte literal, as there are
-# no previous bytes to copy. A minimal (1 byte) copy after that, generated
-# from an emitCopy call in encodeBlock's main loop, would require at least
-# another inputMargin bytes, for the reason above: we want any emitLiteral
-# calls inside encodeBlock's main loop to use the fast path if possible, which
-# requires being able to overrun by inputMargin bytes. Thus,
-# minNonLiteralBlockSize equals 1 + 1 + inputMargin.
-#
-# The C++ code doesn't use this exact threshold, but it could, as discussed at
-# https:#groups.google.com/d/topic/snappy-compression/oGbhsdIJSJ8/discussion
-# The difference between Nim (2+inputMargin) and C++ (inputMargin) is purely an
-# optimization. It should not affect the encoded form. This is tested by
-# TestSameEncodingAsCppShortCopies.
-const
-  minNonLiteralBlockSize = 1 + 1 + inputMargin
-
 # Encode returns the encoded form of src. The returned slice may be a sub-
 # slice of dst if dst was large enough to hold the entire encoded block.
 # Otherwise, a newly allocated slice will be returned.
 #
 # The dst and src must not overlap. It is valid to pass a nil dst.
 proc appendSnappyBytes*(s: Stream, src: openArray[byte]) =
-  let n = maxEncodedLen(src.len)
-  if n == 0: return
+  var lenU32 = checkInputLen(src.len).valueOr:
+    return
 
   # The block starts with the varint-encoded length of the decompressed bytes.
   var
     p = 0
-    len = src.len
 
-  s.putUVarInt uint64(src.len)
+  s.putUVarInt lenU32
 
-  while len > 0:
-    var blockSize = len
-    if blockSize > maxBlockSize:
-      blockSize = maxBlockSize
+  while lenU32 > 0:
+    let blockSize = min(maxBlockSize, lenU32)
 
     if blockSize < minNonLiteralBlockSize:
-      s.emitLiteral src[p..<p+blockSize]
+      s.emitLiteral src[p..<p+blockSize.int]
     else:
-      s.encodeBlock src[p..<p+blockSize]
+      s.encodeBlock src[p..<p+blockSize.int]
 
-    inc(p, blockSize)
-    dec(len, blockSize)
+    p += blockSize.int
+    lenU32 -= blockSize
 
 proc appendSnappyBytes*(dst, src: Stream, srcLen: int) =
+  var lenU32 = checkInputLen(srcLen).valueOr:
+    return
+
   var blockData = newSeq[byte](maxBlockSize)
-  var len = srcLen
 
-  dst.putUVarInt uint64(len)
+  dst.putUVarInt lenU32
 
-  while len > 0:
-    var blockSize = len
-    if blockSize > maxBlockSize:
-      blockSize = maxBlockSize
+  while lenU32 > 0:
+    let blockSize = min(maxBlockSize, lenU32)
 
-    discard src.readData(addr blockData[0], blockSize)
+    discard src.readData(addr blockData[0], blockSize.int)
 
     if blockSize < minNonLiteralBlockSize:
       dst.emitLiteral blockData[0..<blockSize]
     else:
       dst.encodeBlock blockData[0..<blockSize]
 
-    dec(len, blockSize)
+    lenU32 -= blockSize
 
   dst.flush()
 
 # Encode returns the encoded form of src.
 proc encode*(src: openarray[byte]): seq[byte] =
-  let n = maxEncodedLen(src.len)
-  if n == 0: return
-  result = newSeq[byte](n)
+  let
+    lenU32 = checkInputLen(src.len).valueOr:
+      return
+    maxCompressed = maxCompressedLen(lenU32).valueOr:
+      return
+
   var outputStream = newStringStream()
-  outputStream.data = newStringOfCap(n)
+  outputStream.data = newStringOfCap(maxCompressed)
   outputStream.appendSnappyBytes src
   return cast[seq[byte]](outputStream.data)
 

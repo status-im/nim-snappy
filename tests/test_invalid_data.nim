@@ -1,6 +1,8 @@
 {.used.}
 
-import os, faststreams/inputs, ../snappy/framing
+import
+  unittest2,
+  faststreams/inputs, ../snappy/framing
 
 proc parseInvalidInput(payload: openArray[byte]): bool =
   try:
@@ -9,9 +11,6 @@ proc parseInvalidInput(payload: openArray[byte]): bool =
   except SnappyError:
     result = true
 
-proc main() =
-  for x in walkDirRec("tests" / "invalidInput"):
-    let z = readFile(x)
-    doAssert parseInvalidInput(z.toOpenArrayByte(0, z.len-1))
-
-main()
+suite "invalid data":
+  test "invalid header":
+    check parseInvalidInput([byte 3, 2, 1, 0])

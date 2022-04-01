@@ -1,7 +1,8 @@
 {.used.}
 
 import
-  unittest, os,
+  std/os,
+  unittest2,
   faststreams,
   ../snappy/framing
 
@@ -39,30 +40,28 @@ template check_roundtrip(source) =
     else:
       check true
 
-proc main() =
-  suite "framing":
-    setup:
-      let
-        compDir {.used.} = getAppDir() & DirSep & "stream_compressed" & DirSep
-        uncompDir {.used.} = getAppDir() & DirSep & "data" & DirSep
+suite "framing":
+  setup:
+    let
+      compDir {.used.} = getAppDir() & DirSep & "stream_compressed" & DirSep
+      uncompDir {.used.} = getAppDir() & DirSep & "data" & DirSep
 
-    check_uncompress("alice29.txt.sz-32k", "alice29.txt")
-    check_uncompress("alice29.txt.sz-64k", "alice29.txt")
-    check_uncompress("house.jpg.sz", "house.jpg")
+  check_uncompress("alice29.txt.sz-32k", "alice29.txt")
+  check_uncompress("alice29.txt.sz-64k", "alice29.txt")
+  check_uncompress("house.jpg.sz", "house.jpg")
 
-    check_roundtrip("alice29.txt")
-    check_roundtrip("house.jpg")
-    check_roundtrip("html")
-    check_roundtrip("urls.10K")
-    check_roundtrip("fireworks.jpeg")
+  check_roundtrip("alice29.txt")
+  check_roundtrip("house.jpg")
+  check_roundtrip("html")
+  check_roundtrip("urls.10K")
+  check_roundtrip("fireworks.jpeg")
 
-    check_roundtrip("paper-100k.pdf")
+  check_roundtrip("paper-100k.pdf")
 
-    check_roundtrip("html_x_4")
-    check_roundtrip("asyoulik.txt")
-    check_roundtrip("lcet10.txt")
-    check_roundtrip("plrabn12.txt")
-    check_roundtrip("geo.protodata")
-    check_roundtrip("kppkn.gtb")
-    check_roundtrip("Mark.Twain-Tom.Sawyer.txt")
-main()
+  check_roundtrip("html_x_4")
+  check_roundtrip("asyoulik.txt")
+  check_roundtrip("lcet10.txt")
+  check_roundtrip("plrabn12.txt")
+  check_roundtrip("geo.protodata")
+  check_roundtrip("kppkn.gtb")
+  check_roundtrip("Mark.Twain-Tom.Sawyer.txt")
