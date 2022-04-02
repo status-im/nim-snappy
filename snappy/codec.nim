@@ -58,7 +58,7 @@ type
     bufferTooSmall
     invalidInput
     crcMismatch
-    unknownFrame
+    unknownChunk
 
 {.compile: "crc32c.c".}
 # TODO: we don't have a native implementation of CRC32C algorithm yet.
@@ -164,6 +164,39 @@ func decodeFrameHeader*(input: openArray[byte]): tuple[id: byte, len: int] =
     id = byte(header and 0xff)
     dataLen = int(header shr 8)
   (id, dataLen)
+
+func uncompressedLenFramed*(input: openArray[byte]): Opt[uint64] =
+  var
+    read = 0
+    expected = 0'u64
+
+  while (let remaining = input.len - read; remaining > 0):
+    if remaining < 4:
+      return
+
+    let
+      (id, dataLen) = decodeFrameHeader(input.toOpenArray(read, read + 3))
+
+    if remaining < dataLen + 4:
+      return
+
+    read += 4
+
+    let uncompressed =
+      if id == chunkCompressed:
+        uncompressedLen(input.toOpenArray(read + 4, read + dataLen - 1)).valueOr:
+          return
+      elif id == chunkUncompressed: uint32(dataLen - 4)
+      elif id < 0x80: return # Reserved unskippable chunk
+      else: 0'u32 # Reserved skippable (for example framing format header)
+
+    if uncompressed > uint64.high - expected:
+      return # Overflow (unlikely, but..)
+
+    expected += uncompressed
+    read += dataLen
+
+  ok(expected)
 
 const
   maxCompressedBlockLen* = maxCompressedLen(maxBlockLen).uint32

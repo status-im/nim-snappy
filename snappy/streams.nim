@@ -24,8 +24,8 @@ proc compress*(input: Stream, inputLen: int, output: Stream) {.
   output.writeData(unsafeAddr header.data[0], header.len)
 
   var
-    tmpIn = newSeqUninitialized[byte](int(maxBlockLen))
-    tmpOut = newSeqUninitialized[byte](int(maxCompressedLen(maxBlockLen)))
+    tmpIn = newSeqUninitialized[byte](int maxBlockLen)
+    tmpOut = newSeqUninitialized[byte](int maxCompressedBlockLen)
     read = 0
 
   while read < inputLen:
@@ -40,6 +40,5 @@ proc compress*(input: Stream, inputLen: int, output: Stream) {.
     output.writeData(addr tmpOut[0], written)
     read += bytes
 
-# TODO uncompress
 # TODO compressFramed
 # TODO uncompressFramed

@@ -1,4 +1,5 @@
 import
+  std/strutils,
   pkg/faststreams/[inputs, multisync, outputs],
   "."/[codec, encoder, exceptions],
   ../snappy
@@ -22,24 +23,20 @@ proc compress*(input: InputStream, output: OutputStream) {.
   ## Input length must not exceed `maxUncompressedLen == 2^32-1` or
   ## `InputTooLarge` will be raised. Other errors are raised as they happen on
   ## the given streams.
-  let inputLen = input.len
-  if inputLen.isSome:
-    let
-      lenU32 = checkInputLen(inputLen.get).valueOr:
-        raiseInputTooLarge()
-      maxCompressed = maxCompressedLen(inputLen.get).valueOr:
-        raiseInputTooLarge()
+  doAssert input.len.isSome, "TODO: support actual .. streams"
+  let
+    lenU32 = checkInputLen(input.len.get).valueOr:
+      raiseInputTooLarge()
+    maxCompressed = maxCompressedLen(input.len.get).valueOr:
+      raiseInputTooLarge()
 
-    output.ensureRunway maxCompressed
-    output.write lenU32.toBytes(Leb128).toOpenArray()
-  else:
-    # TODO: This is a temporary limitation
-    doAssert false, "snappy requires an input stream with a known length"
+  output.ensureRunway maxCompressed
+  output.write lenU32.toBytes(Leb128).toOpenArray()
 
   var
     # TODO instead of a temporary buffer, use `getWriteableBytes` once it
     #      works
-    tmp = newSeqUninitialized[byte](int(maxCompressedLen(maxBlockLen)))
+    tmp = newSeqUninitialized[byte](int maxCompressedBlockLen)
 
   while input.readable(maxBlockLen.int):
     let written = encodeBlock(input.read(maxBlockLen.int), tmp)
@@ -66,9 +63,7 @@ proc compressFramed*(input: InputStream, output: OutputStream) {.
   output.write(framingHeader)
 
   var
-    read = 0
-    tmp = newSeqUninitialized[byte](
-      maxCompressedLen(maxUncompressedFrameDataLen))
+    tmp = newSeqUninitialized[byte](int maxCompressedFrameDataLen)
 
   while input.readable(maxUncompressedFrameDataLen.int):
     let written = encodeFrame(input.read(maxUncompressedFrameDataLen.int), tmp)
@@ -95,9 +90,7 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
   if input.read(framingHeader.len) != framingHeader:
     raise newException(MalformedSnappyData, "Invalid header value")
 
-  var uncompressedData =
-    newSeqUninitialized[byte](maxUncompressedFrameDataLen)
-
+  var tmp = newSeqUninitialized[byte](maxUncompressedFrameDataLen)
   while input.readable(4):
     let (id, dataLen) = decodeFrameHeader(input.read(4))
 
@@ -113,10 +106,10 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
 
       let
         crc = uint32.fromBytesLE input.read(4)
-        uncompressedLen = snappy.uncompress(input.read(dataLen - 4), uncompressedData).valueOr:
+        uncompressed = uncompress(input.read(dataLen - 4), tmp).valueOr:
           raise newException(MalformedSnappyData, "Failed to decompress content")
 
-      if not checkCrcAndAppend(Sync output, uncompressedData.toOpenArray(0, uncompressedLen-1), crc):
+      if not checkCrcAndAppend(Sync output, tmp.toOpenArray(0, uncompressed-1), crc):
         raise newException(MalformedSnappyData, "Content CRC checksum failed")
 
     elif id == chunkUncompressed:
@@ -131,7 +124,7 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
       # Reserved unskippable chunks (chunk types 0x02-0x7f)
       # if we encounter this type of chunk, stop decoding
       # the spec says it is an error
-      raise newException(MalformedSnappyData, "Invalid chunk type")
+      raise newException(MalformedSnappyData, "Invalid chunk type " & toHex(id))
 
     else:
       # Reserved skippable chunks (chunk types 0x80-0xfe)
