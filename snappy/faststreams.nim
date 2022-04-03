@@ -30,7 +30,7 @@ proc compress*(input: InputStream, output: OutputStream) {.
     maxCompressed = maxCompressedLen(input.len.get).valueOr:
       raiseInputTooLarge()
 
-  output.ensureRunway maxCompressed
+  # output.ensureRunway maxCompressed
   output.write lenU32.toBytes(Leb128).toOpenArray()
 
   var
