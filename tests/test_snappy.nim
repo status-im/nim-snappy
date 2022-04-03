@@ -53,6 +53,9 @@ proc roundTrip(msg: string, source: openArray[byte]) =
   # differences in encoding however!
   checkpoint(msg)
   check:
+    encodedWithSnappy == encodedWithFastStreams
+    encodedWithSnappy == encodedWithNimStreams
+
     snappy.decode(encodedWithSnappy) == source
     cpp_snappy.decode(encodedWithSnappy) == source
 
