@@ -49,6 +49,8 @@ proc compress*(input: InputStream, output: OutputStream) {.
     let written = encodeBlock(input.read(remainingBytes), tmp)
     output.write(tmp.toOpenArray(0, written - 1))
 
+  output.flush()
+
 proc compress*(input: openArray[byte], output: OutputStream) {.
     raises: [Defect, InputTooLarge, IOError].} =
   compress(unsafeMemoryInput(input), output)
@@ -133,6 +135,8 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
 
   if input.readable(1):
     raise newException(MalformedSnappyData, "Input contains unknown trailing bytes")
+
+  output.flush()
 
 proc uncompressFramed*(input: openArray[byte], output: OutputStream) {.
     raises: [Defect, IOError, SnappyDecodingError].} =
