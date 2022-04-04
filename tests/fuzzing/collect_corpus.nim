@@ -32,5 +32,5 @@ for kind, file in walkDir(dataDir):
             snappy.encode(fileContents))
 
   writeFile(framingFormatCorpusDir / framingFileName,
-            framingFormatCompress(fileContents))
+            encodeFramed(fileContents))
 
