@@ -1,11 +1,12 @@
 {.used.}
 
 import
+  stew/byteutils,
   std/[os, strutils],
   unittest2,
-  faststreams,
-  ../snappy/codec,
-  snappy, randgen, openarrays_snappy, nimstreams_snappy, cpp_snappy
+  ../snappy,
+  ../snappy/[faststreams, streams],
+  ./cpp_snappy, ./randgen
 
 include system/timers
 
@@ -21,34 +22,51 @@ proc readSource(sourceName: string): seq[byte] =
   var f = open(sourceName, fmRead)
   if f.isNil: return
   let size = f.getFileSize()
-  result = newSeq[byte](size)
+  result = newSeqUninitialized[byte](size)
   doAssert(size == f.readBytes(result, 0, size))
   f.close()
 
-proc roundTrip(msg: string, source: openarray[byte]) =
-  var encodedWithFastStreams = snappy.encode(source)
-  var encodedWithAppendSnappyBytes = block:
-    let output = memoryOutput()
-    snappy.appendSnappyBytes(output, source)
-    output.getOutput
+proc streamsEncode(input: openArray[byte]): seq[byte] =
+  let
+    ins = newStringStream(string.fromBytes(input))
+    outs = newStringStream()
+  compress(ins, input.len, outs)
+  outs.setPosition(0)
+  outs.readAll().toBytes()
 
-  var encodedWithNimStreams = nimstreams_snappy.encode(source)
-  var encodedWithOpenArrays = openarrays_snappy.encode(source)
+proc faststreamsEncode(input: openArray[byte]): seq[byte] =
+  let
+    ins = unsafeMemoryInput(string.fromBytes(input))
+    outs = memoryOutput()
+  compress(ins, outs)
+  outs.getOutput()
 
+proc roundTrip(msg: string, source: openArray[byte]) =
+  var encodedWithSnappy = snappy.encode(source)
+  var encodedWithFastStreams = faststreamsEncode(source)
+  var encodedWithNimStreams = streamsEncode(source)
+  var encodedWithCpp = cpp_snappy.encode(source)
+
+  # check encodedWithCpp.len == encodedWithOpenArrays.len
+  # check: encodedWithOpenArrays == encodedWithCpp
   # Test that everything can decode with C++ snappy - there may be minor
   # differences in encoding however!
+  checkpoint(msg)
   check:
+    encodedWithSnappy == encodedWithFastStreams
+    encodedWithSnappy == encodedWithNimStreams
+
+    snappy.decode(encodedWithSnappy) == source
+    cpp_snappy.decode(encodedWithSnappy) == source
+
     snappy.decode(encodedWithFastStreams) == source
     cpp_snappy.decode(encodedWithFastStreams) == source
 
-    snappy.decode(encodedWithAppendSnappyBytes) == source
-    cpp_snappy.decode(encodedWithAppendSnappyBytes) == source
-
-    nimstreams_snappy.decode(encodedWithNimStreams) == source
+    snappy.decode(encodedWithNimStreams) == source
     cpp_snappy.decode(encodedWithNimStreams) == source
 
-    openarrays_snappy.decode(encodedWithOpenArrays) == source
-    cpp_snappy.decode(encodedWithOpenArrays) == source
+    snappy.decode(encodedWithCpp) == source
+    cpp_snappy.decode(encodedWithCpp) == source
 
 proc roundTripRev(msg: string, source: openArray[byte]) =
   var
@@ -70,15 +88,6 @@ proc roundTrip(msg: string, sourceName: string) =
 
 template toBytes(s: string): auto =
   toOpenArrayByte(s, 0, s.len-1)
-
-when false:
-  # TODO: This is not tested yet
-  import streams
-
-  proc compressFileWithNimStreams(src, dst: string) =
-    var input = newFileStream(src, fmRead)
-    var output = newFileStream(dst, fmWrite)
-    output.appendSnappyBytes input, getFileSize(src).int
 
 suite "snappy":
   test "basic roundtrip test":
@@ -113,7 +122,7 @@ suite "snappy":
       inc(i, 23)
 
     for m in 1 .. 5:
-      for i in m * maxBlockSize.int - 5 .. m * maxBlockSize.int + 5:
+      for i in m * maxBlockLen.int - 5 .. m * maxBlockLen.int + 5:
         var buf = newSeq[byte](i)
         for j in 0..<buf.len:
           buf[j] = byte((j mod 10) + int('a'))

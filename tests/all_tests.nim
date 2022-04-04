@@ -1,4 +1,4 @@
 import
-  test_codec,
-  test_framing_format,
+  test_snappy,
+  test_framed,
   test_invalid_data

@@ -1,6 +1,5 @@
 import
-  faststreams/inputs, testutils/fuzzing,
-  ../../snappy/framing
+  faststreams/inputs, testutils/fuzzing
 
 test:
   block:
