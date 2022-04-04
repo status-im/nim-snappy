@@ -2,6 +2,11 @@ import
   stew/[endians2, ptrops],
   ./codec
 
+template offset(p: ptr byte, offset: uint): ptr byte =
+  cast[ptr byte](cast[uint](p) + offset)
+template rewind(p: ptr byte, offset: uint): ptr byte =
+  cast[ptr byte](cast[uint](p) - offset)
+
 template load16(src: ptr byte): uint16 =
   uint16.fromBytesLE(cast[ptr UncheckedArray[byte]](src).toOpenArray(0, 1))
 
@@ -41,8 +46,8 @@ func decodeAllTags*(
 
       if length <= 16 and op.distance(opEnd) >= 16 and ip.distance(ipEnd) >= 16:
         copyMem(op, ip, 16)
-        op = op.offset(int length)
-        ip = ip.offset(int length)
+        op = op.offset(uint length)
+        ip = ip.offset(uint length)
         continue
 
       if length >= 61:
@@ -60,7 +65,10 @@ func decodeAllTags*(
         # Decode 4 bytes (to avoid branching) then mask the excess
         length = (len and mask[lenlen]) + 1
 
-        ip = ip.offset(int lenlen)
+        ip = ip.offset(uint lenlen)
+
+        if length == 0: # Wrapping in case of 4-byte length
+          return err(CodecError.invalidInput)
 
       if (op.distance(opEnd).uint32 < length) or
           (ip.distance(ipEnd).uint32 < length):
@@ -68,8 +76,8 @@ func decodeAllTags*(
 
       copyMem(op, ip, length)
 
-      op = op.offset(int length)
-      ip = ip.offset(int length)
+      op = op.offset(uint length)
+      ip = ip.offset(uint length)
       continue
 
     of tagCopy1:
@@ -102,7 +110,7 @@ func decodeAllTags*(
       return err(CodecError.invalidInput)
 
     var
-      opOffset = op.offset(-int(offset))
+      opOffset = op.rewind(uint offset)
 
     if offset >= 8:
       # When there is sufficient non-overlap, we can bulk-copyMem

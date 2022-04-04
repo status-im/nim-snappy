@@ -9,13 +9,16 @@ const
   maxHashTableBits* = 14
   maxTableSize* = 1'u16 shl maxHashTableBits
 
+template offset(p: ptr byte, offset: uint): ptr byte =
+  cast[ptr byte](cast[uint](p) + offset)
+
 func write(dst: var ptr byte, b: byte) =
   dst[] = b
   dst = dst.offset(1)
 
 func write(dst: var ptr byte, src: ptr byte, slen: uint32) =
   copyMem(dst, src, int slen)
-  dst = dst.offset(int slen)
+  dst = dst.offset(uint slen)
 
 template load32(src: ptr byte): uint32 =
   uint32.fromBytesLE(cast[ptr UncheckedArray[byte]](src).toOpenArray(0, 3))
@@ -50,8 +53,8 @@ func emitLiteral(
     dst.write((byte(n) shl 2) or tagLiteral)
 
     copyMem(dst, src, 16)
-    dst = dst.offset(int slen)
-    src = src.offset(int slen)
+    dst = dst.offset(uint slen)
+    src = src.offset(uint slen)
     return
 
   if n < 60:
@@ -65,7 +68,7 @@ func emitLiteral(
     dst.write(byte((n shr 8) and 0xFF))
 
   dst.write(src, slen)
-  src = src.offset(int slen)
+  src = src.offset(uint slen)
 
 # emitCopy writes a copy chunk and returns the number of bytes written.
 #
@@ -73,7 +76,7 @@ func emitLiteral(
 #  dst is long enough to hold the encoded bytes
 #  1 <= offset and offset <= 65535
 #  4 <= length and length <= 65535
-func emitCopy(dst: var ptr byte, offset: uint32, length: uint16) =
+func emitCopy(dst: var ptr byte, offset, length: uint16) =
   var
     length = length
 
@@ -89,28 +92,28 @@ func emitCopy(dst: var ptr byte, offset: uint32, length: uint16) =
   while length >= 68:
     # Emit a length 64 copy, encoded as 3 bytes.
     dst.write((63 shl 2) or tagCopy2)
-    dst.write(byte(offset and 0xFF))
-    dst.write(byte((offset shr 8) and 0xFF))
+    dst.write(byte(offset))
+    dst.write(byte(offset shr 8))
     dec(length, 64)
 
   if length > 64:
     # Emit a length 60 copy, encoded as 3 bytes.
     dst.write((59 shl 2) or tagCopy2)
-    dst.write(byte(offset and 0xFF))
-    dst.write(byte((offset shr 8) and 0xFF))
+    dst.write(byte(offset))
+    dst.write(byte(offset shr 8))
 
     dec(length, 60)
 
   if (length >= 12) or (offset >= 2048):
     # Emit the remaining copy, encoded as 3 bytes.
     dst.write((byte(length-1) shl 2) or tagCopy2)
-    dst.write(byte(offset and 0xFF))
-    dst.write(byte((offset shr 8) and 0xFF))
+    dst.write(byte(offset))
+    dst.write(byte(offset shr 8))
     return
 
   # Emit the remaining copy, encoded as 2 bytes.
-  dst.write(byte((((offset shr 8) shl 5) or ((length-4) shl 2) or tagCopy1) and 0xFF))
-  dst.write(byte(offset and 0xFF))
+  dst.write(byte((offset shr 8) shl 5) or byte((length-4) shl 2) or tagCopy1)
+  dst.write(byte(offset))
 
 when cpuEndian == bigEndian:
   {.error: "TODO: Big endian not supported".}
@@ -131,7 +134,7 @@ func findMatchLength(s1, s2, s2Limit: ptr byte, data: var uint64): uint16 =
     if a1 != a2:
       let
         xorVal = a1 xor a2
-        shift = firstOne(xorVal) - 1
+        shift = uint16(firstOne(xorVal) - 1)
         matchedBytes = shift shr 3
 
       data = load64(s2.offset(matchedBytes))
@@ -142,7 +145,7 @@ func findMatchLength(s1, s2, s2Limit: ptr byte, data: var uint64): uint16 =
 
   while s2.offset(16) <= s2Limit:
     let
-      a1 = load64(s1.offset(int matched))
+      a1 = load64(s1.offset(uint matched))
       a2 = load64(s2)
 
     if a1 == a2:
@@ -151,13 +154,13 @@ func findMatchLength(s1, s2, s2Limit: ptr byte, data: var uint64): uint16 =
     else:
       let
         xorVal = a1 xor a2
-        shift = firstOne(xorVal) - 1
+        shift = uint16(firstOne(xorVal) - 1)
         matchedBytes = shift shr 3
       data = load64(s2.offset(matchedBytes))
       return uint16 matched + uint16 matchedBytes
 
   while s2 < s2Limit:
-    if s1.offset(int matched)[] == s2[]:
+    if s1.offset(matched)[] == s2[]:
       s2 = s2.offset(1)
       matched += 1
     else:
@@ -232,7 +235,7 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
   # looking for copies.
   static: doAssert inputMargin <= minNonLiteralBlockSize
   let
-    ipLimit = ip.offset(int(ilen - inputMargin))
+    ipLimit = ip.offset(uint(ilen - inputMargin))
 
   var preload = load32(ip.offset(1))
 
@@ -279,20 +282,20 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
             let dword = if i == 0: preload else: uint32 data
 
             let hash = hash(dword, tableMask)
-            candidate = baseIp.offset(int table[hash])
+            candidate = baseIp.offset(table[hash])
             table[hash] = delta + i
 
             if load32(candidate) == dword:
               # debugEcho "fast ", i
               op.write((i shl 2) or tagLiteral)
               copyMem(op, nextEmit, 16)
-              ip = ip.offset(int i)
-              op = op.offset(int i + 1)
+              ip = ip.offset(i)
+              op = op.offset(i + 1)
               break doLiteral
 
             data = data shr 8
 
-          data = load64(ip.offset(int (4*j + 4)))
+          data = load64(ip.offset((4*j + 4)))
 
         ip = ip.offset(16)
         skip += 16;
@@ -301,12 +304,12 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
         let hash = hash(uint32 data, tableMask)
         let bytesBetweenHashLookups = skip shr 5
         skip += bytesBetweenHashLookups
-        let nextIp = ip.offset(int bytesBetweenHashLookups)
+        let nextIp = ip.offset(bytesBetweenHashLookups)
         if nextIp > ipLimit:
           ip = nextEmit
           emitRemainder()
 
-        candidate = baseIp.offset(int table[hash])
+        candidate = baseIp.offset(table[hash])
 
         table[hash] = uint16 baseIp.distance(ip)
         if uint32(data) == load32(candidate):
@@ -335,9 +338,9 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
       let
         matched = findMatchLength(
           candidate.offset(4), ip.offset(4), ipEnd, data) + 4
-      ip = ip.offset(int matched)
+      ip = ip.offset(matched)
 
-      emitCopy(op, uint32(candidate.distance(base)), matched)
+      emitCopy(op, uint16(candidate.distance(base)), matched)
 
       if ip > ipLimit:
         emitRemainder()
@@ -351,7 +354,7 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
       table[hash(load32(ip.offset(-1)), tableMask)] = uint16(baseIp.distance(ip) - 1)
 
       let hash = hash(uint32 data, tableMask)
-      candidate = baseIp.offset(int table[hash])
+      candidate = baseIp.offset(table[hash])
       table[hash] = uint16 baseIp.distance(ip)
 
       if uint32(data) != load32(candidate):
