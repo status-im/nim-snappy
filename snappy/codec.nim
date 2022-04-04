@@ -190,8 +190,8 @@ func uncompressedLenFramed*(input: openArray[byte]): Opt[uint64] =
       elif id < 0x80: return # Reserved unskippable chunk
       else: 0'u32 # Reserved skippable (for example framing format header)
 
-    if uncompressed > uint64.high - expected:
-      return # Overflow (unlikely, but..)
+    if uncompressed > maxUncompressedFrameDataLen:
+      return # Uncomnpressed data has limits (for the known chunk types)
 
     expected += uncompressed
     read += dataLen

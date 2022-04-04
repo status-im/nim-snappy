@@ -124,6 +124,11 @@ suite "snappy":
     for m in 1 .. 5:
       for i in m * maxBlockLen.int - 5 .. m * maxBlockLen.int + 5:
         var buf = newSeq[byte](i)
+        roundTrip("empty buf " & $buf.len, buf)
+
+    for m in 1 .. 5:
+      for i in m * maxBlockLen.int - 5 .. m * maxBlockLen.int + 5:
+        var buf = newSeq[byte](i)
         for j in 0..<buf.len:
           buf[j] = byte((j mod 10) + int('a'))
         roundTrip("buf " & $buf.len, buf)

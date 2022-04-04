@@ -197,11 +197,19 @@ func uncompressFramed*(input: openArray[byte], output: var openArray[byte]):
 
       let
         crc = uint32.fromBytesLE input.toOpenArray(read, read + 3)
+        maxOutput = min(maxUncompressedFrameDataLen.int, output.len - written)
         uncompressed = uncompress(
           input.toOpenArray(read + 4, read + dataLen - 1),
-          output.toOpenArray(written, output.high)).valueOr:
+          output.toOpenArray(written, written + maxOutput - 1)).valueOr:
             let res = case error
-            of CodecError.bufferTooSmall: ok((read - 4, written))
+            of CodecError.bufferTooSmall:
+              let uncompressed =
+                uncompressedLen(input.toOpenArray(read + 4, read + dataLen - 1))
+              if uncompressed.isErr() or
+                  uncompressed.get() > maxUncompressedFrameDataLen:
+                err(FrameError.invalidInput)
+              else:
+                ok((read - 4, written))
             of CodecError.invalidInput: err(FrameError.invalidInput)
             return res
 
@@ -222,6 +230,10 @@ func uncompressFramed*(input: openArray[byte], output: var openArray[byte]):
         return err(FrameError.crcMismatch)
 
       let uncompressed = dataLen - 4 # dataLen includes CRC length
+
+      if uncompressed > maxUncompressedFrameDataLen.int:
+        return err(FrameError.invalidInput)
+
       if uncompressed > output.len - written:
         return ok((read - 4, written))
 

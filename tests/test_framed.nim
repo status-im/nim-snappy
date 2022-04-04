@@ -61,6 +61,31 @@ template check_roundtrip(source) =
     else:
       check true
 
+proc checkInvalidFramed(payload: openArray[byte], uncompressedLen: int) =
+  var tmp = newSeqUninitialized[byte](uncompressedLen)
+  check:
+    uncompressFramed(payload, tmp).isErr()
+
+  let decoded {.used.} = decodeFramed(payload)
+  check: decoded.len == 0
+
+  expect(SnappyError):
+    var output = memoryOutput()
+    uncompressFramed(unsafeMemoryInput(payload), output)
+
+proc checkValidFramed(payload: openArray[byte], expected: openArray[byte]) =
+  var tmp = newSeqUninitialized[byte](expected.len)
+  check:
+    decodeFramed(payload) == expected
+    uncompressFramed(payload, tmp).get() == (payload.len, expected.len)
+    tmp == expected
+
+  var output = memoryOutput()
+  uncompressFramed(unsafeMemoryInput(payload), output)
+
+  check:
+    output.getOutput() == expected
+
 suite "framing":
   setup:
     let
@@ -86,3 +111,47 @@ suite "framing":
   check_roundtrip("geo.protodata")
   check_roundtrip("kppkn.gtb")
   check_roundtrip("Mark.Twain-Tom.Sawyer.txt")
+
+  test "just a header":
+    checkValidFramed(framingHeader, [])
+
+  test "full uncompressed":
+    let
+      data = newSeq[byte](maxUncompressedFrameDataLen)
+      compressed = snappy.encode(data)
+      framed =
+        @framingHeader & @[byte chunkUncompressed] &
+        @((data.len + 4).uint32.toBytesLE().toOpenArray(0, 2)) &
+        @(maskedCrc(data).toBytesLE()) &
+        data
+
+      framedCompressed =
+        @framingHeader & @[byte chunkCompressed] &
+        @((compressed.len + 4).uint32.toBytesLE().toOpenArray(0, 2)) &
+        @(maskedCrc(data).toBytesLE()) &
+        compressed
+
+    checkValidFramed(framed, data)
+    checkValidFramed(framedCompressed, data)
+
+  test "invalid header":
+    checkInvalidFramed([byte 3, 2, 1, 0], 0)
+
+  test "overlong frame":
+    let
+      data = newSeq[byte](maxUncompressedFrameDataLen + 1)
+      compressed = snappy.encode(data)
+      framed =
+        @framingHeader & @[byte chunkUncompressed] &
+        @((data.len + 4).uint32.toBytesLE().toOpenArray(0, 2)) &
+        @(maskedCrc(data).toBytesLE()) &
+        data
+
+      framedCompressed =
+        @framingHeader & @[byte chunkCompressed] &
+        @((compressed.len + 4).uint32.toBytesLE().toOpenArray(0, 2)) &
+        @(maskedCrc(data).toBytesLE()) &
+        compressed
+
+    checkInvalidFramed(framed, data.len)
+    checkInvalidFramed(framedCompressed, data.len)

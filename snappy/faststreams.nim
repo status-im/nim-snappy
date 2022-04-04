@@ -118,6 +118,9 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
       if dataLen < 4:
         raise newException(MalformedSnappyData, "Frame size too low to contain CRC checksum")
 
+      if dataLen.uint64 - 4 > maxUncompressedFrameDataLen:
+        raise newException(MalformedSnappyData, "Invalid frame length: " & $dataLen)
+
       let crc = uint32.fromBytesLE(input.read(4))
       if not checkCrcAndAppend(Sync output, input.read(dataLen - 4), crc):
         raise newException(MalformedSnappyData, "Content CRC checksum failed")
