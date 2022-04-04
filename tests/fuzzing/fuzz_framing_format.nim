@@ -1,17 +1,15 @@
 import
-  faststreams/inputs, testutils/fuzzing
+  ../../snappy, testutils/fuzzing
 
 test:
   block:
-    let input = unsafeMemoryInput(payload)
-    let decompressed = try: framingFormatUncompress(input)
-                       except SnappyError as err: break
-    if input.len.get > 0:
+    let decompressed = decodeFramed(payload)
+    if payload.len > 0:
       break
 
-    let compressed = framingFormatCompress(decompressed)
+    let compressed = encodeFramed(decompressed)
     if compressed != payload:
-      let decompressedAgain = framingFormatUncompress(compressed)
+      let decompressedAgain = decodeFramed(compressed)
       if decompressedAgain != decompressed:
         doAssert false
 
