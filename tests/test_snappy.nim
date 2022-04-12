@@ -147,6 +147,12 @@ suite "snappy":
       let decoded = snappy.decode(encoded)
       check decoded == decompressed
 
+    block:
+      # Sanity check that we actually compress things :)
+      let buf = newSeq[byte](1024)
+      check:
+        snappy.encode(buf).len < buf.len div 2
+
   template badData(encoded: string): untyped =
     block:
       var decoded = snappy.decode(encoded.toBytes)

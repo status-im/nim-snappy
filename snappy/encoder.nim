@@ -208,7 +208,7 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
 
   var
     ip = unsafeAddr input[0] # Input pointer - current reading position
-    op = addr output[0] # Ouptut pointer, current writing position
+    op = addr output[0] # Output pointer, current writing position
 
   let
     baseIp = ip
@@ -286,7 +286,6 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
             table[hash] = delta + i
 
             if load32(candidate) == dword:
-              # debugEcho "fast ", i
               op.write((i shl 2) or tagLiteral)
               copyMem(op, nextEmit, 16)
               ip = ip.offset(i)
@@ -363,8 +362,8 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
   emitRemainder()
 
 func encodeFrame*(input: openArray[byte], output: var openArray[byte]): int =
-  # Write a single frame of data using either compressed or uncompressed
-  # frames depending on whether we succeed in compressing the input
+  ## Write a single frame of data using either compressed or uncompressed
+  ## frames depending on whether we succeed in compressing the input
   doAssert input.len > 0 and input.len.uint64 <= maxUncompressedFrameDataLen
   let
     ilen = uint32 input.len
@@ -377,8 +376,8 @@ func encodeFrame*(input: openArray[byte], output: var openArray[byte]): int =
     crc = maskedCrc(input)
   output[4..7] = crc.toBytesLE()
 
-  if output.len >= minNonLiteralBlockSize:
-    # If it's only a literal, no point in usign compression
+  # If input is smaller than a literal, it won't compress at all
+  if input.len >= minNonLiteralBlockSize:
     let
       header = ilen.toBytes(Leb128)
       headerLen = header.len
@@ -395,7 +394,7 @@ func encodeFrame*(input: openArray[byte], output: var openArray[byte]): int =
 
       return frameLen + 4
 
-  # Compresses poorly or too small - write uncompressed
+  # Compresses poorly - write uncompressed
   let
     frameLen = input.len + 4
   output[0] = chunkUncompressed

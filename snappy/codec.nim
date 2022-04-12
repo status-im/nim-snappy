@@ -126,7 +126,7 @@ func maxCompressedLen*(inputLen: int): Opt[uint64] =
 func uncompressedLen*(input: openArray[byte]): Opt[uint32] =
   ## Read the uncompressed length from a stream - at least the first 5
   ## bytes of the compressed input must be given
-  ## `uint32` is used because the lenght may not fit in an `int`
+  ## `uint32` is used because the length may not fit in an `int`
   ## on 32-bit machines.
   let (lenU32, bytesRead) = fromBytes(uint32, input, Leb128)
   if bytesRead <= 0:
@@ -146,14 +146,17 @@ func maxCompressedLenFramed*(inputLen: int64): uint64 =
     return framingHeader.len
 
   let
+    # At least one frame..
     frames = (inputLen.uint64 + maxUncompressedFrameDataLen - 1) div
       maxUncompressedFrameDataLen
-    lastFrameDataLen =
-      uint32(inputLen.uint64 - ((frames - 1) * maxUncompressedFrameDataLen))
     maxFramesLen =
       # When encoding frames, we need the last frame to be large enough to
-      # accomodate the compression overhead so that we can attempt compression
-      ((frames - 1) * maxFrameLen) + maxCompressedLen(lastFrameDataLen) + 8
+      # accomodate the compression overhead so that we can attempt compression -
+      # as a simplification, we make compute the buffer for a full frame (so
+      # that we have enough space for compressing the second last frame even
+      # when the last frame is small)
+      ((frames - 1) * maxFrameLen) +
+        maxCompressedLen(maxUncompressedFrameDataLen) + 8
 
   maxFramesLen + framingHeader.len
 

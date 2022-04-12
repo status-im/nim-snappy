@@ -19,7 +19,7 @@ export codec, results
 ## * `encode`/`decode` are convenience wrappers for the above that take care of
 ##   memory allocation
 ##
-## Framed encodings are also supported via functions carring the `Framed` suffix
+## Framed encodings are also supported via functions carrying the `Framed` suffix
 ##
 ## * [Framing format](https://github.com/google/snappy/blob/main/framing_format.txt)
 
@@ -165,20 +165,33 @@ func encodeFramed*(input: openArray[byte]): seq[byte] =
 
   result.setLen(written)
 
-func uncompressFramed*(input: openArray[byte], output: var openArray[byte]):
+func uncompressFramed*(
+    input: openArray[byte], output: var openArray[byte], checkHeader = true):
     Result[tuple[read: int, written: int], FrameError] =
   ## Uncompress as many frames as possible from `input` and write them to
   ## `output`, returning the number of bytes read and written.
   ##
+  ## When the `output` buffer is too small to hold the uncompressed data,
+  ## the function will return the number of bytes consumed from the input and
+  ## the number of correctly written bytes in the output (which may be smaller
+  ## than the length of the output buffer).
+  ##
+  ## Decompression can be resumed by calling `uncompressFramed` again with
+  ## `checkHeader = false` and the input positioned at the returned read offset
+  ## and a new output buffer.
+  ##
   ## In case of errors, `output` may be partially overwritten with invalid data.
-  if input.len < framingHeader.len:
-    return err(FrameError.invalidInput)
-
-  if input.toOpenArray(0, framingHeader.len - 1) != framingHeader:
-    return err(FrameError.invalidInput)
-
   var
-    read = framingHeader.len
+    read =
+      if checkHeader:
+        if input.len < framingHeader.len:
+          return err(FrameError.invalidInput)
+
+        if input.toOpenArray(0, framingHeader.len - 1) != framingHeader:
+          return err(FrameError.invalidInput)
+        framingHeader.len
+      else:
+        0
     written = 0
 
   while (let remaining = input.len - read; remaining > 0):

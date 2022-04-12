@@ -39,7 +39,20 @@ template check_uncompress(source, target: string) =
     check:
       read < sourceData.len
       written < expected.len
-    if expected.toOpenArray(0, written - 1) != uncompressOut.toOpenArray(0, written - 1):
+    if expected.toOpenArray(0, written - 1) !=
+        uncompressOut.toOpenArray(0, written - 1):
+      check false
+
+    # Resume decompression
+    var uncompressRest = newSeq[byte](expected.len - written)
+    let (read2, written2) = uncompressFramed(
+      sourceData.toOpenArray(read, sourceData.high),
+      uncompressRest, false).expect("decompression worked")
+    check:
+      read2 == sourceData.len - read
+      written2 == expected.len - written
+    if expected.toOpenArray(written, expected.high) !=
+        uncompressRest.toOpenArray(0, written2 - 1):
       check false
 
 template check_roundtrip(source) =
@@ -114,6 +127,26 @@ suite "framing":
 
   test "just a header":
     checkValidFramed(framingHeader, [])
+
+  test "buffer sizes":
+    var
+      buf = newSeq[byte](128 * 1024)
+    for i, c in buf.mpairs():
+      c = byte(i)
+
+    let tests = [
+      0, 1, 10,
+      minNonLiteralBlockSize - 1,
+      minNonLiteralBlockSize,
+      minNonLiteralBlockSize + 1,
+      int maxUncompressedFrameDataLen - 1,
+      int maxUncompressedFrameDataLen,
+      int maxUncompressedFrameDataLen + 1,
+      buf.len]
+    for i in tests:
+      let recoded = decodeFramed(encodeFramed(buf.toOpenArray(0, i - 1)))
+      check:
+        recoded == buf[0..i - 1]
 
   test "full uncompressed":
     let

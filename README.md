@@ -20,7 +20,7 @@ The main module, `snappy`, contains in-memory encoders and decoders:
   * Simplified error reporting
   * Suitable for small buffers mainly
 
-Framed encodings are also supported via functions carring the `Framed` suffix.
+Framed encodings are also supported via functions carrying the `Framed` suffix.
 
 * [Framing format](https://github.com/google/snappy/blob/main/framing_format.txt)
 
@@ -70,7 +70,7 @@ proc uncompressFramed*(input: InputStream, output: OutputStream)
 :warning: BETA API, subject to change
 
 ```nim
-import snappt/streams
+import snappy/streams
 
 proc compress*(input: Stream, inputLen: int, output: Stream)
 # TODO compressFramed

@@ -30,6 +30,7 @@ proc compress*(input: InputStream, output: OutputStream) {.
     maxCompressed = maxCompressedLen(input.len.get).valueOr:
       raiseInputTooLarge()
 
+  # TODO https://github.com/status-im/nim-faststreams/issues/28
   # output.ensureRunway maxCompressed
   output.write lenU32.toBytes(Leb128).toOpenArray()
 
