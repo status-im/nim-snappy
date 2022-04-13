@@ -6,11 +6,11 @@ import
 ## used directly in user code
 
 const
-  maxHashTableBits* = 14
-  maxTableSize* = 1'u16 shl maxHashTableBits
+  maxHashTableBits = 14
+  maxTableSize = 1'u16 shl maxHashTableBits
 
 # These load templates assume there is enough data to read at the margin, which
-# the code ensures via manual range checking - the range check adds 40%
+# the code ensures via manual range checking - the built-in range check adds 40%
 # execution time
 template load32(input: openArray[byte], offsetParam: int): uint32 =
   let offset = offsetParam
@@ -48,8 +48,8 @@ func emitLiteral(
   when fast:
     if slen <= 16:
       dst[0] = (byte(n) shl 2) or tagLiteral
-
       copyMem(addr dst[1], unsafeAddr src[0], 16)
+
       return slen + 1
 
   let w =
@@ -221,7 +221,6 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
   let
     opHigh = output.high
     ipHigh = input.high
-    ipLen = input.len
 
   if ilen32 < minNonLiteralBlockSize:
     # We need a few bytes to work with for the optimized loops below
@@ -241,12 +240,12 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
   # looking for copies.
   static: doAssert inputMargin <= minNonLiteralBlockSize
   let
-    ipLimit = ipLen - inputMargin
+    ipLimit = input.len - inputMargin
 
   var preload = load32(input, ip + 1)
 
   template emitRemainder =
-    if ip < ipLen:
+    if ip < input.len:
       op += emitLiteral(
         output.toOpenArray(op, opHigh), input.toOpenArray(ip, ipHigh))
     return op
@@ -275,27 +274,27 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
       data = load64(input, ip)
       skip = 32'u32
       candidate: uint16
+
     block doLiteral: # After this block, a literal will have been emitted
       if (ipLimit >= ip + 16):
         let delta = uint16 ip
         for j in 0'u8..<4'u8:
           for k in 0'u8..<4'u8:
-            let i = 4 * j + k
-
             # These for-loops are meant to be unrolled. So we can freely
             # special case the first iteration to use the value already
             # loaded in preload.
+            let
+              i = 4 * j + k
+              dword = if i == 0: preload else: uint32 data
+              hash = hash(dword, tableMask)
 
-            let dword = if i == 0: preload else: uint32 data
-
-            let hash = hash(dword, tableMask)
             candidate = table[hash]
             table[hash] = delta + i
 
             if load32(input, int candidate) == dword:
               output[op] = byte(i shl 2) or tagLiteral
-
               copyMem(addr output[op + 1], unsafeAddr input[nextEmit], 16)
+
               ip += int i
               op += int i + 2
               break doLiteral
@@ -308,9 +307,12 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
         skip += 16
 
       while true:
-        let hash = hash(uint32 data, tableMask)
-        let bytesBetweenHashLookups = skip shr 5
+        let
+          hash = hash(uint32 data, tableMask)
+          bytesBetweenHashLookups = skip shr 5
+
         skip += bytesBetweenHashLookups
+
         let nextIp = ip + int bytesBetweenHashLookups
         if nextIp > ipLimit:
           ip = nextEmit
@@ -319,17 +321,20 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
         candidate = table[hash]
 
         table[hash] = uint16 ip
+
         if uint32(data) == load32(input, int candidate):
           break
+
         data = load32(input, nextIp)
         ip = nextIp
 
       # A 4-byte match has been found. We'll later see if more than 4 bytes
-      # match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
+      # match. But, prior to the match, src[nextEmit:ip] are unmatched. Emit
       # them as literal bytes.
       op += emitLiteral(
         output.toOpenArray(op, opHigh),
         input.toOpenArray(nextEmit, ip - 1), true)
+
       nextEmit = ip
 
     # Call emitCopy, and then see if another emitCopy could be our next
@@ -343,17 +348,16 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
     while true:
       # Invariant: we have a 4-byte match at ip, and no need to emit any
       # literal bytes prior to ip.
-      var base = uint16 ip
+      let base = uint16 ip
 
       let
         matched = findMatchLength(input, int candidate + 4, ip + 4, data) + 4
+
       ip += int matched
-
       op += emitCopy(
-        output.toOpenArray(op, opHigh),
-        base - candidate, uint16 matched)
+        output.toOpenArray(op, opHigh), base - candidate, matched)
 
-      if ip > int ipLimit:
+      if ip > ipLimit:
         emitRemainder()
 
       # We could immediately start working at s now, but to improve
@@ -364,13 +368,16 @@ func encodeBlock*(input: openArray[byte], output: var openArray[byte]): int =
       # three load32 calls.
       table[hash(load32(input, ip - 1), tableMask)] = uint16(ip - 1)
 
-      let hash = hash(uint32 data, tableMask)
+      let
+        hash = hash(uint32 data, tableMask)
+
       candidate = table[hash]
       table[hash] = uint16 ip
 
       if uint32(data) != load32(input, int candidate):
         break
     preload = uint32(data shr 8)
+
   emitRemainder()
 
 func encodeFrame*(input: openArray[byte], output: var openArray[byte]): int =
@@ -409,9 +416,9 @@ func encodeFrame*(input: openArray[byte], output: var openArray[byte]): int =
   # Compresses poorly - write uncompressed
   let
     frameLen = input.len + 4
+
   output[0] = chunkUncompressed
   output[1..3] = uint32(frameLen).toBytesLE().toOpenArray(0, 2)
-
-  copyMem(addr output[8], unsafeAddr input[0], input.len)
+  output[8..<8 + input.len] = input
 
   frameLen + 4

@@ -3,8 +3,8 @@ import
   ./codec
 
 # These load templates assume there is enough data to read at the margin, which
-# the code ensures via manual range checking - the range check otherwise adds
-# 40% execution time
+# the code ensures via manual range checking - the built-in range check adds 40%
+# execution time
 template load16(input: openArray[byte], offsetParam: int): uint16 =
   let offset = offsetParam
   uint16.fromBytesLE(
@@ -21,11 +21,10 @@ func decodeAllTags*(
   ## Decode all bytes of `input` into `output` and return the number of
   ## of bytes written. Returns error if input does not fit in output.
 
-  # `uint` / pointer arithmetic because:
-  if input.len <= 0:
+  if input.len <= 0: # let the optimizer know len > 0
     return ok(0)
 
-  if output.len <= 0:
+  if output.len <= 0: # let the optimizer know len > 0
     return err(CodecError.bufferTooSmall)
 
   var
@@ -44,14 +43,14 @@ func decodeAllTags*(
 
       length = int((tag shr 2) + 1) # 1 <= len32 <= 64
 
-      if length <= 16 and output.len - op >= 16 and input.len - ip >= 16:
+      if length <= 16 and (output.len - op) >= 16 and (input.len - ip) >= 16:
         copyMem(addr output[op], unsafeAddr input[ip], 16)
         op += length
         ip += length
         continue
 
       if length >= 61:
-        if (input.len - ip) <= 61:
+        if (input.len - ip) < 61:
           # There must be at least 61 bytes, else we wouldn't be in this branch
           return err(CodecError.invalidInput)
 
@@ -65,9 +64,11 @@ func decodeAllTags*(
 
         if len32 == 0: # wrap-around for 4-byte length
           return err(CodecError.invalidInput)
+
         when sizeof(int) == sizeof(len32):
           if len32 > int.high.uint32: # Can't have this many bytes..
             return err(CodecError.invalidInput)
+
         length = int len32
         ip += lenlen
 
@@ -105,7 +106,6 @@ func decodeAllTags*(
       offset = load32(input, ip + 1)
       ip += 5
 
-
     # offset = 0 is invalid, and we catch it by doing a wrapping -1
     if op.uint32 <= (offset - 1'u32):
       return err(CodecError.invalidInput)
@@ -141,12 +141,13 @@ func decodeAllTags*(
         pos += 8
         len -= 8
 
-      op += length
     else:
       var pos = op
       while pos < op + length:
         output[pos] = output[src]
         pos += 1
         src += 1
-      op = op + length
+
+    op += length
+
   ok(op)
