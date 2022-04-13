@@ -1,17 +1,19 @@
 import
-  stew/[endians2, ptrops],
+  stew/[endians2],
   ./codec
 
-template offset(p: ptr byte, offset: uint): ptr byte =
-  cast[ptr byte](cast[uint](p) + offset)
-template rewind(p: ptr byte, offset: uint): ptr byte =
-  cast[ptr byte](cast[uint](p) - offset)
+# These load templates assume there is enough data to read at the margin, which
+# the code ensures via manual range checking - the range check otherwise adds
+# 40% execution time
+template load16(input: openArray[byte], offsetParam: int): uint16 =
+  let offset = offsetParam
+  uint16.fromBytesLE(
+    cast[ptr UncheckedArray[byte]](input).toOpenArray(offset, offset + 1))
 
-template load16(src: ptr byte): uint16 =
-  uint16.fromBytesLE(cast[ptr UncheckedArray[byte]](src).toOpenArray(0, 1))
-
-template load32(src: ptr byte): uint32 =
-  uint32.fromBytesLE(cast[ptr UncheckedArray[byte]](src).toOpenArray(0, 3))
+template load32(input: openArray[byte], offsetParam: int): uint32 =
+  let offset = offsetParam
+  uint32.fromBytesLE(
+    cast[ptr UncheckedArray[byte]](input).toOpenArray(offset, offset + 3))
 
 func decodeAllTags*(
     input: openArray[byte],
@@ -20,115 +22,131 @@ func decodeAllTags*(
   ## of bytes written. Returns error if input does not fit in output.
 
   # `uint` / pointer arithmetic because:
-  # TODO https://github.com/nim-lang/Nim/issues/19653
-  if input.len == 0:
+  if input.len <= 0:
     return ok(0)
 
-  if output.len == 0:
-    return err(CodecError.bufferTooSMall)
+  if output.len <= 0:
+    return err(CodecError.bufferTooSmall)
 
   var
-    op = addr output[0]
-    baseOp = op
-    opEnd = op.offset(output.len)
-    ip = unsafeAddr input[0]
-    ipEnd = ip.offset(input.len)
-    offset = 0'u32
-    length = 0'u32
+    op = 0
+    ip = 0
+    length: int
+    offset: uint32
 
-  while ip < ipEnd:
-    let tag = ip[]
+  # TODO https://github.com/nim-lang/Nim/issues/19653
+  while uint(ip) < uint(input.len):
+    let tag = input[ip]
+
     case (tag and 0x03)
     of tagLiteral:
-      ip = ip.offset(1)
+      ip += 1
 
-      length = uint32(tag shr 2) + 1 # 1 <= length <= 64
+      length = int((tag shr 2) + 1) # 1 <= len32 <= 64
 
-      if length <= 16 and op.distance(opEnd) >= 16 and ip.distance(ipEnd) >= 16:
-        copyMem(op, ip, 16)
-        op = op.offset(uint length)
-        ip = ip.offset(uint length)
+      if length <= 16 and output.len - op >= 16 and input.len - ip >= 16:
+        copyMem(addr output[op], unsafeAddr input[ip], 16)
+        op += length
+        ip += length
         continue
 
       if length >= 61:
-        if ip.offset(61) > ipEnd:
+        if (input.len - ip) <= 61:
           # There must be at least 61 bytes, else we wouldn't be in this branch
           return err(CodecError.invalidInput)
 
-        # Length is actually in the little-endian bytes that follow
-        let
-          lenlen = length - 60 # 1-4 bytes
-          len = load32(ip)
-
         const mask = [0'u32, 0xff'u32, 0xffff'u32, 0xffffff'u32, 0xffffffff'u32]
 
-        # Decode 4 bytes (to avoid branching) then mask the excess
-        length = (len and mask[lenlen]) + 1
+        # Length is actually in the little-endian bytes that follow
+        # Decode 4 bytes then mask the excess (to avoid branching)
+        let
+          lenlen = length - 60 # 1-4
+          len32 = (load32(input, ip) and mask[lenlen]) + 1
 
-        ip = ip.offset(uint lenlen)
-
-        if length == 0: # Wrapping in case of 4-byte length
+        if len32 == 0: # wrap-around for 4-byte length
           return err(CodecError.invalidInput)
+        when sizeof(int) == sizeof(len32):
+          if len32 > int.high.uint32: # Can't have this many bytes..
+            return err(CodecError.invalidInput)
+        length = int len32
+        ip += lenlen
 
-      if (op.distance(opEnd).uint32 < length) or
-          (ip.distance(ipEnd).uint32 < length):
+      if ((output.len - op) < length) or
+          ((input.len - ip) < length):
         return err(CodecError.invalidInput)
 
-      copyMem(op, ip, length)
+      copyMem(addr output[op], unsafeAddr input[ip], length)
 
-      op = op.offset(uint length)
-      ip = ip.offset(uint length)
+      op += length
+      ip += length
       continue
 
     of tagCopy1:
-      ip = ip.offset(2)
-      if ip > ipEnd:
+      if (input.len - ip) < 2:
         return err(CodecError.invalidInput)
 
-      length = 4 + uint32((tag shr 2) and 0x07)
-      offset = (uint32(tag and 0xe0) shl 3) or uint32(ip.offset(-1)[])
+      length = int(4 + ((tag shr 2) and 0x07))
+      offset = (uint32(tag and 0xe0) shl 3) or uint32(input[ip + 1])
 
+      ip += 2
     of tagCopy2:
-      ip = ip.offset(3)
-      if ip > ipEnd:
+      if (input.len - ip) < 3:
         return err(CodecError.invalidInput)
 
-      length = 1 + uint32(tag shr 2)
-      offset = uint32(load16(ip.offset(-2)))
+      length = int(1 + (tag shr 2))
+      offset = uint32(load16(input, ip + 1))
 
+      ip += 3
     else: # tagCopy4:
-      ip = ip.offset(5)
-      if ip > ipEnd:
+      if (input.len - ip) < 5:
         return err(CodecError.invalidInput)
 
-      length = 1 + uint32(tag shr 2)
-      offset = load32(ip.offset(-4))
+      length = int(1 + (tag shr 2))
+      offset = load32(input, ip + 1)
+      ip += 5
 
-    if offset <= 0 or
-        baseOp.distance(op).uint32 < offset.uint32 or
-        op.distance(opEnd).uint32 < length:
+
+    # offset = 0 is invalid, and we catch it by doing a wrapping -1
+    if op.uint32 <= (offset - 1'u32):
       return err(CodecError.invalidInput)
 
-    var
-      opOffset = op.rewind(uint offset)
+    var src = op - int offset # safe, because offset < op and op < int.high
 
-    if offset >= 8:
-      # When there is sufficient non-overlap, we can bulk-copyMem
-      while length >= 8:
-        copyMem(op, opOffset, 8)
-        length -= 8
-        op = op.offset(8)
-        opOffset = opOffset.offset(8)
+    # Fast path: short non-overlapping copies
+    if length <= 16 and offset >= 8 and (output.len - op) >= 16:
+      # When offset is large enough, there is no overlap and we can use
+      # bulk copy instructions - this is safe because we just checked that
+      # there's enough space in the output buffer
+      copyMem(addr output[op], addr output[src], 8)
+      copyMem(addr output[op + 8], addr output[src + 8], 8)
+      op += length
+      continue
 
-    # Copy from an earlier sub-slice of dst to a later sub-slice. Unlike
-    # the built-in copy function, this byte-by-byte copy always runs
-    # forwards, even if the slices overlap. Conceptually, this is:
-    #
-    # d += forwardCopy(dst[d:d+length], dst[d-offset:])
-    while length >= 1:
-      op[] = opOffset[]
-      length -= 1
-      op = op.offset(1)
-      opOffset = opOffset.offset(1)
+    if (output.len - op) < length:
+      return err(CodecError.invalidInput)
 
-  ok(baseOp.distance(op))
+    if (output.len - op) >= length + 10:
+      var
+        pos = op
+        len = length
+
+      while pos - src < 8:
+        copyMem(addr output[pos], addr output[src], 8)
+        len -= pos - src
+        pos += pos - src
+
+      while len > 0:
+        copyMem(addr output[pos], addr output[src], 8)
+        src += 8
+        pos += 8
+        len -= 8
+
+      op += length
+    else:
+      var pos = op
+      while pos < op + length:
+        output[pos] = output[src]
+        pos += 1
+        src += 1
+      op = op + length
+  ok(op)
