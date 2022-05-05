@@ -25,6 +25,9 @@ template check_uncompress(source, target: string) =
     if expected != decodeFramed(sourceData):
       check false
 
+    check:
+      uncompressedLenFramed(sourceData) == Opt[uint64].ok(expected.len.uint64)
+
     var uncompressOut = newSeqUninitialized[byte](expected.len)
     check:
       uncompressFramed(sourceData, uncompressOut).expect(
@@ -63,6 +66,9 @@ template check_roundtrip(source) =
     compressFramed(expected, ost)
     let compressed = ost.getOutput()
 
+    check:
+      uncompressedLenFramed(compressed) == Opt[uint64].ok(expected.len.uint64)
+
     var inst = memoryInput(compressed)
     var outst = memoryOutput()
     uncompressFramed(inst, outst)
@@ -86,6 +92,8 @@ proc checkInvalidFramed(payload: openArray[byte], uncompressedLen: int) =
     var output = memoryOutput()
     uncompressFramed(unsafeMemoryInput(payload), output)
 
+  check uncompressedLenFramed(payload).isNone
+
 proc checkValidFramed(payload: openArray[byte], expected: openArray[byte]) =
   var tmp = newSeqUninitialized[byte](expected.len)
   check:
@@ -98,6 +106,7 @@ proc checkValidFramed(payload: openArray[byte], expected: openArray[byte]) =
 
   check:
     output.getOutput() == expected
+    uncompressedLenFramed(payload) == Opt[uint64].ok(expected.len.uint64)
 
 suite "framing":
   setup:
