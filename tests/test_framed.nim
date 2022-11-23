@@ -102,8 +102,8 @@ proc checkValidFramed(payload: openArray[byte], expected: openArray[byte]) =
 suite "framing":
   setup:
     let
-      compDir {.used.} = getAppDir() & DirSep & "stream_compressed" & DirSep
-      uncompDir {.used.} = getAppDir() & DirSep & "data" & DirSep
+      compDir {.used.} = currentSourcePath.parentDir & DirSep & "stream_compressed" & DirSep
+      uncompDir {.used.} = currentSourcePath.parentDir & DirSep & "data" & DirSep
 
   check_uncompress("alice29.txt.sz-32k", "alice29.txt")
   check_uncompress("alice29.txt.sz-64k", "alice29.txt")

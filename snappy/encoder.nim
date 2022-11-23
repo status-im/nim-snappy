@@ -1,5 +1,5 @@
 import
-  stew/[bitops2, byteutils, endians2, leb128, arrayops, ptrops],
+  stew/[bitops2, byteutils, endians2, leb128, arrayops],
   ./codec
 
 ## Internal low-level implementation of the snappy block encoder - should not be
