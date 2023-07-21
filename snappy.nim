@@ -1,10 +1,10 @@
+{.push raises: [].}
+
 import
   stew/[arrayops, endians2, leb128, results],
   ./snappy/[codec, decoder, encoder]
 
 export codec, results
-
-{.push raises: [Defect].}
 
 ## Compression and decompression utilities for the snappy compression algorithm:
 ##

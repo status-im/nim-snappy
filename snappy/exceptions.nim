@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 type
   SnappyError* = object of CatchableError
 
@@ -9,5 +11,5 @@ type
 
   InputTooLarge* = object of SnappyEncodingError
 
-func raiseInputTooLarge*() {.noreturn, raises: [Defect, InputTooLarge].} =
+func raiseInputTooLarge*() {.noreturn, raises: [InputTooLarge].} =
   raise newException(InputTooLarge, "Input too large to be compressed with Snappy")

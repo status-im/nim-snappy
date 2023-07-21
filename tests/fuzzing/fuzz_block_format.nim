@@ -2,7 +2,7 @@ import
   testutils/fuzzing,
   ../../snappy
 
-{.push raises: [Defect].}
+{.push raises: [].}
 
 {.passl: "-lsnappy".}
 
