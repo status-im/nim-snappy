@@ -1,5 +1,7 @@
+{.push raises: [].}
+
 import
-  std/strutils,
+  stew/byteutils,
   pkg/faststreams/[inputs, multisync, outputs],
   "."/[codec, encoder, exceptions],
   ../snappy
@@ -7,17 +9,15 @@ import
 export
   inputs, multisync, outputs, codec, exceptions
 
-{.push raises: [Defect].}
-
 proc checkCrcAndAppend(
     output: OutputStream, data: openArray[byte], crc: uint32): bool {.
-    raises: [Defect, IOError].}=
+    raises: [IOError].}=
   if maskedCrc(data) == crc:
     output.write(data)
     return true
 
 proc compress*(input: InputStream, output: OutputStream) {.
-    raises: [Defect, InputTooLarge, IOError].} =
+    raises: [InputTooLarge, IOError].} =
   ## Compress all bytes of `input`, writing into `output` and flushing at the end.
   ##
   ## Input length must not exceed `maxUncompressedLen == 2^32-1` or
@@ -53,7 +53,7 @@ proc compress*(input: InputStream, output: OutputStream) {.
   output.flush()
 
 proc compress*(input: openArray[byte], output: OutputStream) {.
-    raises: [Defect, InputTooLarge, IOError].} =
+    raises: [InputTooLarge, IOError].} =
   compress(unsafeMemoryInput(input), output)
 
 # `uncompress` is not implemented due to the requirement that the full output
@@ -61,7 +61,7 @@ proc compress*(input: openArray[byte], output: OutputStream) {.
 # TODO reading from a stream is still feasible
 
 proc compressFramed*(input: InputStream, output: OutputStream) {.
-    raises: [Defect, IOError].} =
+    raises: [IOError].} =
   # write the magic identifier
   output.write(framingHeader)
 
@@ -82,11 +82,11 @@ proc compressFramed*(input: InputStream, output: OutputStream) {.
   output.flush()
 
 proc compressFramed*(input: openArray[byte], output: OutputStream) {.
-    raises: [Defect, IOError].} =
+    raises: [IOError].} =
   compressFramed(unsafeMemoryInput(input), output)
 
 proc uncompressFramed*(input: InputStream, output: OutputStream) {.
-    fsMultiSync, raises: [Defect, IOError, SnappyDecodingError].} =
+    fsMultiSync, raises: [IOError, SnappyDecodingError].} =
   if not input.readable(framingHeader.len):
     raise newException(UnexpectedEofError, "Failed to read stream header")
 
@@ -130,7 +130,7 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
       # Reserved unskippable chunks (chunk types 0x02-0x7f)
       # if we encounter this type of chunk, stop decoding
       # the spec says it is an error
-      raise newException(MalformedSnappyData, "Invalid chunk type " & toHex(id))
+      raise newException(MalformedSnappyData, "Invalid chunk type " & toHex([id]))
 
     else:
       # Reserved skippable chunks (chunk types 0x80-0xfe)
@@ -143,5 +143,5 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
   output.flush()
 
 proc uncompressFramed*(input: openArray[byte], output: OutputStream) {.
-    raises: [Defect, IOError, SnappyDecodingError].} =
+    raises: [IOError, SnappyDecodingError].} =
   uncompressFramed(unsafeMemoryInput(input), output)

@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   stew/[endians2, leb128, results]
 

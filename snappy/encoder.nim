@@ -1,3 +1,5 @@
+{.push raises: [].}
+
 import
   stew/[bitops2, byteutils, endians2, leb128, arrayops],
   ./codec

@@ -1,13 +1,13 @@
+{.push raises: [].}
+
 import
   std/streams,
   "."/[codec, encoder, exceptions]
 
 export streams, exceptions
 
-{.push raises: [Defect].}
-
 proc compress*(input: Stream, inputLen: int, output: Stream) {.
-    raises: [Defect, InputTooLarge, OSError, IOError].} =
+    raises: [InputTooLarge, OSError, IOError].} =
   ## Compress the first `inputLen` of `input`, writing into `output`.
   ##
   ## If fewer than `inputLen` bytes are read, an exception is raised but
