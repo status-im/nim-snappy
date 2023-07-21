@@ -10,9 +10,10 @@ export
   inputs, multisync, outputs, codec, exceptions
 
 proc checkCrcAndAppend(
-    output: OutputStream, data: openArray[byte], crc: uint32): bool {.
+    output: OutputStream, data: openArray[byte], crc: uint32,
+    checkIntegrity: bool): bool {.
     raises: [IOError].}=
-  if maskedCrc(data) == crc:
+  if not checkIntegrity or maskedCrc(data) == crc:
     output.write(data)
     return true
 
@@ -85,7 +86,8 @@ proc compressFramed*(input: openArray[byte], output: OutputStream) {.
     raises: [IOError].} =
   compressFramed(unsafeMemoryInput(input), output)
 
-proc uncompressFramed*(input: InputStream, output: OutputStream) {.
+proc uncompressFramed*(
+    input: InputStream, output: OutputStream, checkIntegrity = true) {.
     fsMultiSync, raises: [IOError, SnappyDecodingError].} =
   if not input.readable(framingHeader.len):
     raise newException(UnexpectedEofError, "Failed to read stream header")
@@ -112,7 +114,8 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
         uncompressed = uncompress(input.read(dataLen - 4), tmp).valueOr:
           raise newException(MalformedSnappyData, "Failed to decompress content")
 
-      if not checkCrcAndAppend(Sync output, tmp.toOpenArray(0, uncompressed-1), crc):
+      if not checkCrcAndAppend(
+          Sync output, tmp.toOpenArray(0, uncompressed-1), crc, checkIntegrity):
         raise newException(MalformedSnappyData, "Content CRC checksum failed")
 
     elif id == chunkUncompressed:
@@ -123,7 +126,8 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
         raise newException(MalformedSnappyData, "Invalid frame length: " & $dataLen)
 
       let crc = uint32.fromBytesLE(input.read(4))
-      if not checkCrcAndAppend(Sync output, input.read(dataLen - 4), crc):
+      if not checkCrcAndAppend(
+          Sync output, input.read(dataLen - 4), crc, checkIntegrity):
         raise newException(MalformedSnappyData, "Content CRC checksum failed")
 
     elif id < 0x80:
@@ -142,6 +146,8 @@ proc uncompressFramed*(input: InputStream, output: OutputStream) {.
 
   output.flush()
 
-proc uncompressFramed*(input: openArray[byte], output: OutputStream) {.
+proc uncompressFramed*(
+    input: openArray[byte], output: OutputStream, checkIntegrity = true) {.
     raises: [IOError, SnappyDecodingError].} =
-  uncompressFramed(unsafeMemoryInput(input), output)
+  uncompressFramed(
+    unsafeMemoryInput(input), output, checkIntegrity = checkIntegrity)

@@ -7,3 +7,4 @@ master
 # Fuzzer-generated files
 crash-*
 
+build/
