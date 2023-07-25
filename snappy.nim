@@ -106,7 +106,7 @@ func uncompress*(input: openArray[byte], output: var openArray[byte]):
   if written.uint64 != lenU32:
     return err(CodecError.invalidInput) # Header does not match content
 
-  return ok(written)
+  ok(written)
 
 func decode*(input: openArray[byte], maxSize = maxUncompressedLen): seq[byte] =
   ## Decode input returning the uncompressed output. On error, return an empty
@@ -117,7 +117,7 @@ func decode*(input: openArray[byte], maxSize = maxUncompressedLen): seq[byte] =
   let uncompressed = uncompressedLen(input).valueOr:
     return
 
-  if uncompressed > maxSize.uint64 or uncompressed > int.high.uint64:
+  if uncompressed > maxSize or uncompressed > int.high.uint64:
     return
 
   # TODO https://github.com/nim-lang/Nim/issues/19357
@@ -166,7 +166,8 @@ func encodeFramed*(input: openArray[byte]): seq[byte] =
   result.setLen(written)
 
 func uncompressFramed*(
-    input: openArray[byte], output: var openArray[byte], checkHeader = true):
+    input: openArray[byte], output: var openArray[byte], checkHeader = true,
+    checkIntegrity = true):
     Result[tuple[read: int, written: int], FrameError] =
   ## Uncompress as many frames as possible from `input` and write them to
   ## `output`, returning the number of bytes read and written.
@@ -226,7 +227,7 @@ func uncompressFramed*(
             of CodecError.invalidInput: err(FrameError.invalidInput)
             return res
 
-      if maskedCrc(
+      if checkIntegrity and maskedCrc(
           output.toOpenArray(written, written + (uncompressed - 1))) != crc:
         return err(FrameError.crcMismatch)
 
@@ -239,7 +240,8 @@ func uncompressFramed*(
       let
         crc = uint32.fromBytesLE input.toOpenArray(read, read + 3)
 
-      if maskedCrc(input.toOpenArray(read + 4, read + (dataLen - 1))) != crc:
+      if checkIntegrity and
+          maskedCrc(input.toOpenArray(read + 4, read + (dataLen - 1))) != crc:
         return err(FrameError.crcMismatch)
 
       let uncompressed = dataLen - 4 # dataLen includes CRC length
@@ -263,7 +265,9 @@ func uncompressFramed*(
 
   ok((read, written))
 
-func decodeFramed*(input: openArray[byte], maxSize = int.high): seq[byte] =
+func decodeFramed*(
+    input: openArray[byte], maxSize = int.high,
+    checkIntegrity = true): seq[byte] =
   ## Uncompress as many frames as possible from `input` and return the
   ## uncompressed output.
   ##
@@ -275,13 +279,13 @@ func decodeFramed*(input: openArray[byte], maxSize = int.high): seq[byte] =
   let uncompressed = uncompressedLenFramed(input).valueOr:
     return
 
-  if uncompressed > maxSize.uint64 or uncompressed > int.high.uint64:
+  if uncompressed > maxSize.uint64:
     return
 
   # TODO https://github.com/nim-lang/Nim/issues/19357
   result = newSeqUninitialized[byte](int uncompressed)
 
-  if uncompressFramed(input, result).isErr():
+  if uncompressFramed(input, result, checkIntegrity = checkIntegrity).isErr():
     result = @[] # Empty return on error
 
 template compress*(input: openArray[byte]): seq[byte] {.

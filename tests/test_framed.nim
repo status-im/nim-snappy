@@ -94,15 +94,15 @@ proc checkInvalidFramed(payload: openArray[byte], uncompressedLen: int) =
 
   check uncompressedLenFramed(payload).isNone
 
-proc checkValidFramed(payload: openArray[byte], expected: openArray[byte]) =
+proc checkValidFramed(payload: openArray[byte], expected: openArray[byte], checkIntegrity = true) =
   var tmp = newSeqUninitialized[byte](expected.len)
   check:
-    decodeFramed(payload) == expected
-    uncompressFramed(payload, tmp).get() == (payload.len, expected.len)
+    decodeFramed(payload, checkIntegrity = checkIntegrity) == expected
+    uncompressFramed(payload, tmp, checkIntegrity = checkIntegrity).get() == (payload.len, expected.len)
     tmp == expected
 
   var output = memoryOutput()
-  uncompressFramed(unsafeMemoryInput(payload), output)
+  uncompressFramed(unsafeMemoryInput(payload), output, checkIntegrity = checkIntegrity)
 
   check:
     output.getOutput() == expected
@@ -175,6 +175,25 @@ suite "framing":
 
     checkValidFramed(framed, data)
     checkValidFramed(framedCompressed, data)
+
+  test "checkIntegrity false":
+    let
+      data = newSeq[byte](maxUncompressedFrameDataLen)
+      compressed = snappy.encode(data)
+      framed =
+        @framingHeader & @[byte chunkUncompressed] &
+        @((data.len + 4).uint32.toBytesLE().toOpenArray(0, 2)) &
+        @([byte 0, 0, 0, 0]) &
+        data
+
+      framedCompressed =
+        @framingHeader & @[byte chunkCompressed] &
+        @((compressed.len + 4).uint32.toBytesLE().toOpenArray(0, 2)) &
+        @([byte 0, 0, 0, 0]) &
+        compressed
+
+    checkValidFramed(framed, data, checkIntegrity = false)
+    checkValidFramed(framedCompressed, data, checkIntegrity = false)
 
   test "invalid header":
     checkInvalidFramed([byte 3, 2, 1, 0], 0)

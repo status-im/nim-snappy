@@ -49,7 +49,13 @@ proc readSource(sourceName: string): seq[byte] =
   doAssert(size == f.readBytes(result, 0, size))
   f.close()
 
-proc streamsEncode(input: openArray[byte]): seq[byte] =
+proc memEncode(input: openArray[byte]): seq[byte] {.noinline.} =
+  snappy.encode(input)
+
+proc memDecode(input: openArray[byte]): seq[byte] {.noinline.} =
+  snappy.decode(input)
+
+proc streamsEncode(input: openArray[byte]): seq[byte] {.noinline.} =
   let
     ins = newStringStream(string.fromBytes(input))
     outs = newStringStream()
@@ -57,21 +63,27 @@ proc streamsEncode(input: openArray[byte]): seq[byte] =
   outs.setPosition(0)
   outs.readAll().toBytes() # This line is a hotspot due to missing RVO
 
-proc faststreamsEncode(input: openArray[byte]): seq[byte] =
+proc faststreamsEncode(input: openArray[byte]): seq[byte] {.noinline.} =
   let
     ins = unsafeMemoryInput(input)
     outs = memoryOutput()
   compress(ins, outs)
   outs.getOutput() # This line is a hotspot due to missing RVO
 
-proc faststreamsEncodeFramed(input: openArray[byte]): seq[byte] =
+proc memEncodeFramed(input: openArray[byte]): seq[byte] {.noinline.} =
+  snappy.encodeFramed(input)
+
+proc memDecodeFramed(input: openArray[byte]): seq[byte] {.noinline.} =
+  snappy.decodeFramed(input)
+
+proc faststreamsEncodeFramed(input: openArray[byte]): seq[byte] {.noinline.} =
   let
     ins = unsafeMemoryInput(input)
     outs = memoryOutput()
   compressFramed(ins, outs)
   outs.getOutput() # This line is a hotspot due to missing RVO
 
-proc faststreamsDecodeFramed(input: openArray[byte]): seq[byte] =
+proc faststreamsDecodeFramed(input: openArray[byte]): seq[byte] {.noinline.} =
   let
     ins = unsafeMemoryInput(input)
     outs = memoryOutput()
@@ -87,9 +99,9 @@ proc timedRoundTrip(msg: string, source: openArray[byte], iterations = 100) =
 
   for i in 0..<iterations:
     timeit(timers.inMemory[0]):
-      let encodedWithSnappy = snappy.encode(source)
+      let encodedWithSnappy = memEncode(source)
     timeit(timers.inMemory[1]):
-      let decodedWithSnappy = snappy.decode(encodedWithSnappy)
+      let decodedWithSnappy = memDecode(encodedWithSnappy)
 
     timeit(timers.fastStreams[0]):
       let encodedWithFastStreams = faststreamsEncode(source)
@@ -122,9 +134,9 @@ proc timedRoundTripFramed(msg: string, source: openArray[byte], iterations = 100
 
   for i in 0..<iterations:
     timeit(timers.inMemory[0]):
-      let encodedWithSnappy = snappy.encodeFramed(source)
+      let encodedWithSnappy = memEncodeFramed(source)
     timeit(timers.inMemory[1]):
-      let decodedWithSnappy = snappy.decodeFramed(encodedWithSnappy)
+      let decodedWithSnappy = memDecodeFramed(encodedWithSnappy)
 
     timeit(timers.fastStreams[0]):
       let encodedWithFastStreams = faststreamsEncodeFramed(source)
@@ -163,6 +175,6 @@ roundTrip(dataDir & "geo.protodata")
 roundTrip(dataDir & "kppkn.gtb")
 roundTrip(dataDir & "Mark.Twain-Tom.Sawyer.txt")
 
-# ncli_db --db:db dumpState 0x114a593d248af2ad05580299b803657d4b78a3b6578f47425cc396c9644e800e 2560000
-if fileExists(dataDir & "state-2560000-114a593d-0d5e08e8.ssz"):
-  roundTrip(dataDir & "state-2560000-114a593d-0d5e08e8.ssz", 50)
+# ncli_db --db:db rewindState 0x488b7150f092949f1dfc3137c4e2909a20fe9739d67a5185d75dbd0440c51edd 6800000
+if fileExists(dataDir & "state-6800000-488b7150-d613b584.ssz"):
+  roundTrip(dataDir & "state-6800000-488b7150-d613b584.ssz", 50)
