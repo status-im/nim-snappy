@@ -17,9 +17,14 @@ let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
 let flags = getEnv("NIMFLAGS", "") # Extra flags for the compiler
 let verbose = getEnv("V", "") notin ["", "0"]
 
+const sanitize = "\"-fsanitize=undefined\""
+
 let cfg =
   " --styleCheck:usages --styleCheck:error" &
   (if verbose: "" else: " --verbosity:0 --hints:off") &
+  (if defined(linux):
+    " --passC:" & sanitize & " --passL: " & sanitize
+   else: "") &
   " --skipParentCfg --skipUserCfg --outdir:build --nimcache:build/nimcache -f"
 
 proc build(args, path: string) =
