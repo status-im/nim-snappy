@@ -189,9 +189,14 @@ func uncompressedLenFramed*(input: openArray[byte]): Opt[uint64] =
 
     let uncompressed =
       if id == chunkCompressed:
+        if dataLen < 4: # At least CRC32
+          return
         uncompressedLen(input.toOpenArray(read + 4, read + dataLen - 1)).valueOr:
           return
-      elif id == chunkUncompressed: uint32(dataLen - 4)
+      elif id == chunkUncompressed:
+        if dataLen < 4: # At least CRC32
+          return
+        uint32(dataLen - 4)
       elif id < 0x80: return # Reserved unskippable chunk
       else: 0'u32 # Reserved skippable (for example framing format header)
 

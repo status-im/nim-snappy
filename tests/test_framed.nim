@@ -197,6 +197,7 @@ suite "framing":
 
   test "invalid header":
     checkInvalidFramed([byte 3, 2, 1, 0], 0)
+    checkInvalidFramed([byte 0, 0, 0, 0, 42], 0)
 
   test "overlong frame":
     let
