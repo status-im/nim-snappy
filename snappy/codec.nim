@@ -170,6 +170,10 @@ func decodeFrameHeader*(input: openArray[byte]): tuple[id: byte, len: int] =
     dataLen = int(header shr 8)
   (id, dataLen)
 
+func isSnappyFramedStream*(input: openArray[byte]): bool =
+  input.len >= framingHeader.len and
+  input.toOpenArray(0, framingHeader.len - 1) == framingHeader
+
 func uncompressedLenFramed*(input: openArray[byte]): Opt[uint64] =
   var
     read = 0
