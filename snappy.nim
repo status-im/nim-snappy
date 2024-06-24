@@ -1,7 +1,8 @@
 {.push raises: [].}
 
 import
-  stew/[arrayops, endians2, leb128, results],
+  results,
+  stew/[arrayops, endians2, leb128],
   ./snappy/[codec, decoder, encoder]
 
 export codec, results
