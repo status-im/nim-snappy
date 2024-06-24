@@ -7,9 +7,10 @@ description   = "Nim implementation of snappy compression algorithm"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 1.6.0",
+requires "nim >= 2.0.0",
          "faststreams",
          "unittest2",
+         "results",
          "stew"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
@@ -31,9 +32,8 @@ proc build(args, path: string) =
   exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
 
 proc run(args, path: string) =
-  build args & " -r", path
-  if (NimMajor, NimMinor) > (1, 6):
-    build args & " --mm:refc -r", path
+  build args & " --mm:orc -r", path
+  build args & " --mm:refc -r", path
 
 ### Helper functions
 proc test(args, path: string) =
