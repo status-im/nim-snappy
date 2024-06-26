@@ -1,7 +1,8 @@
 {.push raises: [].}
 
 import
-  stew/[endians2, leb128, results]
+  results,
+  stew/[endians2, leb128]
 
 export endians2, leb128, results
 
