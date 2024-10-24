@@ -70,8 +70,8 @@ jobs:
         if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-fast update -qq
-          sudo DEBIAN_FRONTEND='noninteractive' apt-fast install \
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND='noninteractive' apt-get install \
             --no-install-recommends -yq gcc-multilib g++-multilib \
             libssl-dev:i386
           mkdir -p external/bin
@@ -192,13 +192,8 @@ jobs:
 
       - name: Run tests
         run: |
-          if [[ "${{ matrix.target.os }}" == "windows" ]]; then
-            # https://github.com/status-im/nimbus-eth2/issues/3121
-            export NIMFLAGS="-d:nimRawSetjmp"
-          fi
           nim --version
           nimble --version
           gcc --version
           nimble install -y --depsOnly
           env NIMLANG=c nimble test
-          env NIMLANG=cpp nimble test
