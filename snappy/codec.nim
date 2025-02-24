@@ -126,16 +126,16 @@ func maxCompressedLen*(inputLen: int): Opt[uint64] =
     static: doAssert uint32.high.uint64 <= maxUncompressedLen.uint64
     ok(maxCompressedLen(inputLen.uint32))
 
-func uncompressedLen*(input: openArray[byte]): Opt[uint32] =
-  ## Read the uncompressed length from a stream - at least the first 5
+func uncompressedLen*(input: openArray[byte]): Opt[uint64] =
+  ## Read the uncompressed length from a stream - at least the first 10
   ## bytes of the compressed input must be given
-  ## `uint32` is used because the length may not fit in an `int`
+  ## `uint64` is used because the length may not fit in an `int`
   ## on 32-bit machines.
-  let (lenU32, bytesRead) = fromBytes(uint32, input, Leb128)
+  let (lenU64, bytesRead) = fromBytes(uint64, input, Leb128)
   if bytesRead <= 0:
     err()
   else:
-    ok(lenU32)
+    ok(lenU64)
 
 func maxCompressedLenFramed*(inputLen: int64): uint64 =
   ## The maximum number of bytes a compressed framed snappy stream will occupy,
