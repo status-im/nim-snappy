@@ -36,7 +36,6 @@ jobs:
               os: linux-gcc-14 # This is to use ubuntu 24 and install gcc 14. Should be removed when ubuntu-latest is 26.04
             builder: ubuntu-24.04
             shell: bash
-            shell: bash
           - target:
               os: macos
               cpu: arm64
