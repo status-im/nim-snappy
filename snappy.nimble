@@ -22,7 +22,7 @@ const sanitize = "\"-fsanitize=undefined\""
 
 let cfg =
   " --styleCheck:usages --styleCheck:error" &
-  (if verbose: "" else: " --verbosity:0 --hints:off") &
+  (if verbose: "" else: " --verbosity:0") &
   (if defined(linux):
     " --passC:" & sanitize & " --passL: " & sanitize
    else: "") &
@@ -42,7 +42,7 @@ proc test(args, path: string) =
     mkDir "build"
 
   exec "nim " & getEnv("TEST_LANG", "c") & " " & getEnv("NIMFLAGS") & " " & args &
-    " --skipParentCfg --styleCheck:usages --styleCheck:hint " & path
+    " --skipParentCfg --styleCheck:usages --styleCheck:error " & path
 
 task test, "Run all tests":
   for threads in ["--threads:off", "--threads:on"]:
