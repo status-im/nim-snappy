@@ -157,6 +157,9 @@ jobs:
           if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
             cmake -E env CXXFLAGS="-w" cmake .. -G "MinGW Makefiles" -DCMAKE_IGNORE_PATH="C:/Program Files/Git/usr/bin"
             mingw32-make
+          elif echo | gcc -dM -E - | grep -q '__clang__'; then
+            cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-error=unused-variable -Wno-error=unused-parameter -Wno-error=unknown-warning-option -Wno-error=uninitialized-const-pointer" ../
+            make
           else
             cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-unused-variable -Wno-unused-parameter" ../
             make
