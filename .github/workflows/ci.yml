@@ -158,7 +158,7 @@ jobs:
             cmake -E env CXXFLAGS="-w" cmake .. -G "MinGW Makefiles" -DCMAKE_IGNORE_PATH="C:/Program Files/Git/usr/bin"
             mingw32-make
           else
-            cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-unused-variable -Wno-unused-parameter" ../
+            cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized-const-pointer" ../
             make
           fi
           cp libsnappy.a ../../
