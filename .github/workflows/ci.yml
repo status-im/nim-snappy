@@ -161,7 +161,7 @@ jobs:
             cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-error=unused-variable -Wno-error=unused-parameter -Wno-error=unknown-warning-option -Wno-error=uninitialized-const-pointer" ../
             make
           else
-            cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-error=unused-variable -Wno-error=unused-parameter" ../
+            cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-unused-variable -Wno-unused-parameter" ../
             make
           fi
           cp libsnappy.a ../../
