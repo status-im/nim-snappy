@@ -2,7 +2,7 @@
 
 import
   std/streams,
-  "."/[codec, encoder, exceptions, sequninit]
+  ./[codec, encoder, exceptions, sequninit]
 
 export streams, exceptions
 

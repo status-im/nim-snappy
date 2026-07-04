@@ -3,7 +3,7 @@
 import
   stew/byteutils,
   pkg/faststreams/[inputs, multisync, outputs],
-  "."/[codec, encoder, exceptions, sequninit],
+  ./[codec, encoder, exceptions, sequninit],
   ../snappy
 
 export
