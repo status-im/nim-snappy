@@ -3,7 +3,7 @@
 import
   stew/[arrayops, endians2, leb128],
   results,
-  ./snappy/[codec, decoder, encoder]
+  ./snappy/[codec, decoder, encoder, sequninit]
 
 export codec, results
 
@@ -77,7 +77,7 @@ func encode*(input: openArray[byte]): seq[byte] =
     maxCompressed = maxCompressedLen(input.len).valueOr:
       return
   # TODO https://github.com/nim-lang/Nim/issues/19357
-  result = newSeqUninitialized[byte](maxCompressed)
+  result = newSeqUninit[byte](maxCompressed)
   let written = compress(input, result).expect("we've checked lengths already")
   result.setLen(written)
 
@@ -122,7 +122,7 @@ func decode*(input: openArray[byte], maxSize = maxUncompressedLen): seq[byte] =
     return
 
   # TODO https://github.com/nim-lang/Nim/issues/19357
-  result = newSeqUninitialized[byte](int uncompressed)
+  result = newSeqUninit[byte](int uncompressed)
 
   if uncompress(input, result).isErr():
     result = @[] # Empty return on error
@@ -160,7 +160,7 @@ func encodeFramed*(input: openArray[byte]): seq[byte] =
     return
 
   # TODO https://github.com/nim-lang/Nim/issues/19357
-  result = newSeqUninitialized[byte](int maxCompressed)
+  result = newSeqUninit[byte](int maxCompressed)
   let
     written = compressFramed(input, result).expect("lengths checked")
 
@@ -253,8 +253,9 @@ func uncompressFramed*(
       if uncompressed > output.len - written:
         return ok((read - 4, written))
 
-      copyMem(addr output[written], unsafeAddr input[read + 4], uncompressed)
-      written += uncompressed
+      if uncompressed > 0:
+        copyMem(addr output[written], unsafeAddr input[read + 4], uncompressed)
+        written += uncompressed
 
     elif id < 0x80:
       return err(FrameError.unknownChunk) # Reserved unskippable chunk
@@ -284,7 +285,7 @@ func decodeFramed*(
     return
 
   # TODO https://github.com/nim-lang/Nim/issues/19357
-  result = newSeqUninitialized[byte](int uncompressed)
+  result = newSeqUninit[byte](int uncompressed)
 
   if uncompressFramed(input, result, checkIntegrity = checkIntegrity).isErr():
     result = @[] # Empty return on error

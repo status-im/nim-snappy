@@ -2,7 +2,7 @@
 
 import
   std/streams,
-  "."/[codec, encoder, exceptions]
+  "."/[codec, encoder, exceptions, sequninit]
 
 export streams, exceptions
 
@@ -24,8 +24,8 @@ proc compress*(input: Stream, inputLen: int, output: Stream) {.
   output.writeData(unsafeAddr header.data[0], header.len)
 
   var
-    tmpIn = newSeqUninitialized[byte](int maxBlockLen)
-    tmpOut = newSeqUninitialized[byte](int maxCompressedBlockLen)
+    tmpIn = newSeqUninit[byte](int maxBlockLen)
+    tmpOut = newSeqUninit[byte](int maxCompressedBlockLen)
     read = 0
 
   while read < inputLen:

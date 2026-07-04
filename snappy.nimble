@@ -26,10 +26,11 @@ let cfg =
   (if defined(linux):
     " --passC:" & sanitize & " --passL: " & sanitize
    else: "") &
-  " --skipParentCfg --skipUserCfg --outdir:build --nimcache:build/nimcache -f"
+  " --skipParentCfg --skipUserCfg"
 
 proc build(args, path: string) =
-  exec nimc & " " & lang & " " & cfg & " " & flags & " " & args & " " & path
+  exec nimc & " " & lang & " " & cfg &
+    " --outdir:build --nimcache:build/nimcache -f " & flags & " " & args & " " & path
 
 proc run(args, path: string) =
   build args & " --mm:refc -r", path

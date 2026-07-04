@@ -3,7 +3,7 @@
 import
   stew/byteutils,
   pkg/faststreams/[inputs, multisync, outputs],
-  "."/[codec, encoder, exceptions],
+  "."/[codec, encoder, exceptions, sequninit],
   ../snappy
 
 export
@@ -38,7 +38,7 @@ proc compress*(input: InputStream, output: OutputStream) {.
   var
     # TODO instead of a temporary buffer, use `getWriteableBytes` once it
     #      works
-    tmp = newSeqUninitialized[byte](int maxCompressedBlockLen)
+    tmp = newSeqUninit[byte](int maxCompressedBlockLen)
 
   while input.readable(maxBlockLen.int):
     let written = encodeBlock(input.read(maxBlockLen.int), tmp)
@@ -67,7 +67,7 @@ proc compressFramed*(input: InputStream, output: OutputStream) {.
   output.write(framingHeader)
 
   var
-    tmp = newSeqUninitialized[byte](int maxCompressedFrameDataLen)
+    tmp = newSeqUninit[byte](int maxCompressedFrameDataLen)
 
   while input.readable(maxUncompressedFrameDataLen.int):
     let written = encodeFrame(input.read(maxUncompressedFrameDataLen.int), tmp)
@@ -95,7 +95,7 @@ proc uncompressFramed*(
   if input.read(framingHeader.len) != framingHeader:
     raise newException(MalformedSnappyData, "Invalid header value")
 
-  var tmp = newSeqUninitialized[byte](maxUncompressedFrameDataLen)
+  var tmp = newSeqUninit[byte](maxUncompressedFrameDataLen)
   while input.readable(4):
     let (id, dataLen) = decodeFrameHeader(input.read(4))
 
