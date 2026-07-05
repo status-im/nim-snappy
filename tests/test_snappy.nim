@@ -5,7 +5,7 @@ import
   std/[os, strutils],
   unittest2,
   ../snappy,
-  ../snappy/[faststreams, streams],
+  ../snappy/[faststreams, streams, sequninit],
   ./cpp_snappy, ./randgen
 
 include system/timers
@@ -22,7 +22,7 @@ proc readSource(sourceName: string): seq[byte] =
   var f = open(sourceName, fmRead)
   if f.isNil: return
   let size = f.getFileSize()
-  result = newSeqUninitialized[byte](size)
+  result = newSeqUninit[byte](size)
   doAssert(size == f.readBytes(result, 0, size))
   f.close()
 
@@ -72,10 +72,13 @@ proc roundTripRev(msg: string, source: openArray[byte]) =
   var
     decoded = snappy.decode(source)
     outputSize: csize_t = 0
-    ok = snappy_uncompressed_length(cast[cstring](source[0].unsafeAddr), source.len.csize_t, outputSize) == 0
+  let
+    ok = snappy_uncompressed_length(
+      cast[cstring](source[0].unsafeAddr), source.len.csize_t, outputSize) == 0
     cpp_decoded = cpp_snappy.decode(source)
 
   check:
+    ok
     decoded == cpp_decoded
 
 proc roundTripRev(msg: string, sourceName: string) =

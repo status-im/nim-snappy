@@ -3,7 +3,7 @@
 import
   stew/byteutils,
   os, strformat, stats, times,
-  snappy, cpp_snappy, ../snappy/[faststreams, streams]
+  snappy, cpp_snappy, ../snappy/[faststreams, streams, sequninit]
 
 const
   currentDir = currentSourcePath.parentDir
@@ -45,7 +45,7 @@ proc readSource(sourceName: string): seq[byte] =
   var f = open(sourceName, fmRead)
   if f.isNil: return
   let size = f.getFileSize()
-  result = newSeqUninitialized[byte](size)
+  result = newSeqUninit[byte](size)
   doAssert(size == f.readBytes(result, 0, size))
   f.close()
 

@@ -1,4 +1,4 @@
-import std/os
+import std/os, ../snappy/sequninit
 
 const
   currentDir = currentSourcePath.parentDir
@@ -11,7 +11,7 @@ proc snappy_max_compressed_length*(source_length: csize_t): csize_t {.importc, c
 proc snappy_uncompressed_length*(compressed: cstring, compressed_length: csize_t, res: var csize_t): cint {.importc, cdecl.}
 
 proc encode*(input: openArray[byte]): seq[byte] =
-  result = newSeqUninitialized[byte](
+  result = newSeqUninit[byte](
     snappy_max_compressed_length(input.len.csize_t))
   var bytes = result.len.csize_t
   let res = if input.len() == 0:
@@ -37,7 +37,7 @@ proc decode*(input: openArray[byte]): seq[byte] =
   if bytes == 0:
     return
 
-  result = newSeqUninitialized[byte](bytes.int)
+  result = newSeqUninit[byte](bytes.int)
 
   if snappy_uncompress(
       cast[cstring](unsafeAddr input[0]), input.len().csize_t,

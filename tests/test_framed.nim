@@ -4,7 +4,7 @@ import
   std/os, stew/byteutils,
   unittest2,
   ../snappy,
-  ../snappy/faststreams
+  ../snappy/[faststreams, sequninit]
 
 template check_uncompress(source, target: string) =
   test "uncompress " & source & " to " & target:
@@ -28,7 +28,7 @@ template check_uncompress(source, target: string) =
     check:
       uncompressedLenFramed(sourceData) == Opt[uint64].ok(expected.len.uint64)
 
-    var uncompressOut = newSeqUninitialized[byte](expected.len)
+    var uncompressOut = newSeqUninit[byte](expected.len)
     check:
       uncompressFramed(sourceData, uncompressOut).expect(
         "decompression worked") == (sourceData.len, expected.len)
@@ -81,7 +81,7 @@ template check_roundtrip(source) =
       check true
 
 proc checkInvalidFramed(payload: openArray[byte], uncompressedLen: int) =
-  var tmp = newSeqUninitialized[byte](uncompressedLen)
+  var tmp = newSeqUninit[byte](uncompressedLen)
   check:
     uncompressFramed(payload, tmp).isErr()
 
@@ -95,7 +95,7 @@ proc checkInvalidFramed(payload: openArray[byte], uncompressedLen: int) =
   check uncompressedLenFramed(payload).isNone
 
 proc checkValidFramed(payload: openArray[byte], expected: openArray[byte], checkIntegrity = true) =
-  var tmp = newSeqUninitialized[byte](expected.len)
+  var tmp = newSeqUninit[byte](expected.len)
   check:
     decodeFramed(payload, checkIntegrity = checkIntegrity) == expected
     uncompressFramed(payload, tmp, checkIntegrity = checkIntegrity).get() == (payload.len, expected.len)
