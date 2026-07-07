@@ -1,33 +1,40 @@
 import
   testutils/fuzzing,
+  results,
   stew/ptrops,
   ../../snappy, ../cpp_snappy
 
 {.push raises: [].}
 
-test:
+const MaxLen = 128'u64 * 1024 * 1024
+
+proc cppDecode(payload: openArray[byte]): Opt[seq[byte]] =
+  if payload.len == 0:
+    return err()
+
   var cppDecompressedLen: csize_t
-
-  let
-    lenRes =
-      snappy_uncompressed_length(
-        cast[cstring](baseAddr payload), payload.len.csize_t,
-        cppDecompressedLen)
-
-    decoded = snappy.decode(payload, 128*1024*1024)
-  doAssert decoded.len == 0 or lenRes == 0 and decoded.len == cppDecompressedLen.int
-
-  if decoded.len > 0:
-    var cppDecompressed = newSeq[byte](cppDecompressedLen)
-    doAssert snappy_uncompress(
+  if snappy_uncompressed_length(
       cast[cstring](baseAddr payload), payload.len.csize_t,
-      cast[ptr cchar](baseAddr cppDecompressed), cppDecompressedLen) == 0
+      cppDecompressedLen) != 0:
+    return err()
 
-    doAssert cppDecompressed == decoded, "decompression should match between libraries"
+  if cppDecompressedLen > MaxLen:
+    return err()
 
-    let encoded = snappy.encode(decoded)
-    doAssert snappy_uncompress(
-      cast[cstring](baseAddr encoded), encoded.len.csize_t,
-      cast[ptr cchar](baseAddr cppDecompressed), cppDecompressedLen) == 0
+  var cppDecompressed = newSeq[byte](cppDecompressedLen)
+  if cppDecompressedLen > 0 and snappy_uncompress(
+      cast[cstring](baseAddr payload), payload.len.csize_t,
+      cast[ptr cchar](baseAddr cppDecompressed), cppDecompressedLen) != 0:
+    return err()
 
-    doAssert cppDecompressed == decoded, "cpp should be able to decompress our compressed data"
+  ok cppDecompressed
+
+test:
+  block:
+    let
+      nim = snappy.decode(payload, MaxLen)
+      cpp = cppDecode(payload).valueOr:
+        doAssert nim.len == 0
+        break
+    doAssert nim == cpp
+    doAssert cppDecode(snappy.encode(cpp)) == Opt.some(cpp)
