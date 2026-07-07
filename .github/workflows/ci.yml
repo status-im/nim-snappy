@@ -10,6 +10,9 @@ concurrency: # Cancel stale PR builds (but not push builds)
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -182,3 +185,86 @@ jobs:
           gcc --version
           nimble install -y --depsOnly
           env NIMLANG=c nimble test
+
+  fuzz:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - os: linux
+          - os: macos
+        include:
+          - target:
+              os: linux
+            builder: ubuntu-latest
+          - target:
+              os: macos
+            builder: macos-latest
+
+    name: '${{ matrix.target.os }} Fuzz'
+    runs-on: ${{ matrix.builder }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+
+      - name: Build snappy-cpp
+        run: |
+          cd tests/snappycpp
+          mkdir -p build
+          cd build
+          if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
+            cmake -E env CXXFLAGS="-w" cmake .. -G "MinGW Makefiles" -DCMAKE_IGNORE_PATH="C:/Program Files/Git/usr/bin"
+            mingw32-make
+          elif echo | gcc -dM -E - | grep -q '__clang__'; then
+            cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-error=unused-variable -Wno-error=unused-parameter -Wno-error=unknown-warning-option -Wno-error=uninitialized-const-pointer" ../
+            make
+          else
+            cmake -E env CC=gcc CXX=g++ cmake -D CMAKE_CXX_FLAGS="-Wno-unused-variable -Wno-unused-parameter" ../
+            make
+          fi
+          cp libsnappy.a ../../
+
+      - name: Install Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: 'stable'
+
+      - name: Install fuzzing engines (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+
+          # libFuzzer
+          sudo apt-get install -y clang
+
+          # honggfuzz
+          nimble install -y testutils
+          "$(nimble path testutils | head -1)/scripts/install_honggfuzz.sh"
+          echo "/opt/honggfuzz/usr/local/bin" >> "$GITHUB_PATH"
+
+          # afl
+          sudo apt-get install -y afl++
+          sudo afl-system-config
+
+      - name: Install fuzzing engines (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+
+          # libFuzzer
+          brew install llvm
+          echo "/opt/homebrew/opt/llvm/bin" >> "$GITHUB_PATH"
+
+          # honggfuzz
+          nimble install -y testutils
+          "$(nimble path testutils | head -1)/scripts/install_honggfuzz.sh"
+          echo "/opt/honggfuzz/usr/local/bin" >> "$GITHUB_PATH"
+
+          # afl
+          brew install afl++
+          sudo afl-system-config
+
+      - name: Run fuzzing tests
+        run: nimble fuzz

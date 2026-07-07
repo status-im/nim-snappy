@@ -11,7 +11,8 @@ requires "nim >= 1.6.0",
          "faststreams",
          "unittest2",
          "results",
-         "stew"
+         "stew",
+         "testutils"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
 let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
@@ -49,6 +50,26 @@ task test, "Run all tests":
   for threads in ["--threads:off", "--threads:on"]:
     for mode in ["-d:debug", "-d:release"]:
       run threads & " " & mode, "tests/all_tests"
- 
+
   build "-d:release", "tests/benchmark" # don't run
 
+let
+  fuzzSeconds = getEnv("FUZZ_SECONDS", "100")
+  fuzzTime =
+    if fuzzSeconds == "": ""
+    else: " --duration=" & fuzzSeconds & " "
+
+proc fuzz(format: string) =
+  for fuzzer in ["libFuzzer", "honggfuzz", "afl"]:
+    when defined(macosx):
+      if fuzzer == "honggfuzz":
+        continue
+
+    build "-d:release -r", "tests/fuzzing/collect_corpus.nim"
+    exec "ntu fuzz --fuzzer=" & fuzzer & fuzzTime &
+      "--corpus=tests/fuzzing/corpus/" & format & " " &
+      "tests/fuzzing/fuzz_" & format
+
+task fuzz, "Run fuzzing tests":
+  for format in ["block_format", "framing_format"]:
+    fuzz(format)
