@@ -6,7 +6,7 @@ import
 
 {.push raises: [].}
 
-const MaxLen = 128'u64 * 1024 * 1024
+const MaxLen = 128'u32 * 1024 * 1024
 
 proc cppDecode(payload: openArray[byte]): Opt[seq[byte]] =
   if payload.len == 0:
@@ -18,7 +18,7 @@ proc cppDecode(payload: openArray[byte]): Opt[seq[byte]] =
       cppDecompressedLen) != 0:
     return err()
 
-  if cppDecompressedLen > MaxLen:
+  if cppDecompressedLen > MaxLen.csize_t:
     return err()
 
   var cppDecompressed = newSeq[byte](cppDecompressedLen)
