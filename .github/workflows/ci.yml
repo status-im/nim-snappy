@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - update-deps
   pull_request:
   workflow_dispatch:
 
