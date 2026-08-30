@@ -92,7 +92,8 @@ proc checkInvalidFramed(payload: openArray[byte], uncompressedLen: int) =
     var output = memoryOutput()
     uncompressFramed(unsafeMemoryInput(payload), output)
 
-  check uncompressedLenFramed(payload).isNone
+  check uncompressedLenFramed(payload)
+    .get(uncompressedLen.uint64) == uncompressedLen.uint64
 
 proc checkValidFramed(payload: openArray[byte], expected: openArray[byte], checkIntegrity = true) =
   var tmp = newSeqUninit[byte](expected.len)
@@ -136,6 +137,7 @@ suite "framing":
 
   test "just a header":
     checkValidFramed(framingHeader, [])
+    checkValidFramed(@framingHeader & @framingHeader, [])
 
   test "buffer sizes":
     var
@@ -198,6 +200,7 @@ suite "framing":
   test "invalid header":
     checkInvalidFramed([byte 3, 2, 1, 0], 0)
     checkInvalidFramed([byte 0, 0, 0, 0, 42], 0)
+    checkInvalidFramed(@framingHeader & @framingHeader[0 .. ^2] & @[byte 42], 0)
 
   test "overlong frame":
     let
