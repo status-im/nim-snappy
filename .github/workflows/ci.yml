@@ -52,6 +52,11 @@ jobs:
     name: '${{ matrix.target.os }} Fuzz'
     runs-on: ${{ matrix.builder }}            
     steps:
+      - name: Install Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: 'stable'
+
       - name: Install fuzzing engines (Linux)
         if: runner.os == 'Linux'
         run: |
