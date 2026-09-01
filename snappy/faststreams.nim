@@ -137,9 +137,20 @@ proc uncompressFramed*(
       # the spec says it is an error
       raise newException(MalformedSnappyData, "Invalid chunk type " & toHex([id]))
 
+    elif id == chunkStream:
+      # The stream identifier chunk can come multiple times in the stream
+      # besides the first; if such a chunk shows up, it should simply be
+      # ignored, assuming it has the right length and contents. This allows for
+      # easy concatenation of compressed files without the need for re-framing.
+      # https://github.com/google/snappy/blob/main/framing_format.txt#L76-L79
+      if dataLen != framingHeader.len - 4:
+        raise newException(MalformedSnappyData, "Invalid extra header length")
+
+      if input.read(dataLen) != framingHeader.toOpenArray(4, framingHeader.high):
+        raise newException(MalformedSnappyData, "Invalid extra header value")
+
     else:
-      # Reserved skippable chunks (chunk types 0x80-0xfe)
-      # including STREAM_HEADER (0xff) should be skipped
+      # Reserved skippable chunks (chunk types 0x80-0xfe) should be skipped
       input.advance dataLen
 
   if input.readable(1):
