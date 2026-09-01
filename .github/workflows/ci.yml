@@ -94,21 +94,21 @@ jobs:
 
   fuzz:
     needs: [snappy-cpp, fuzzing-engines]
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - os: linux
-          - os: macos
-        include:
-          - target:
-              os: linux
-            builder: ubuntu-latest
-          - target:
-              os: macos
-            builder: macos-latest    
-    name: '${{ matrix.target.os }} Fuzz'
-    runs-on: ${{ matrix.builder }}            
+    # strategy:
+    #   fail-fast: false
+    #   matrix:
+    #     target:
+    #       - os: linux
+    #       - os: macos
+    #     include:
+    #       - target:
+    #           os: linux
+    #         builder: ubuntu-latest
+    #       - target:
+    #           os: macos
+    #         builder: macos-latest    
+    # name: '${{ matrix.target.os }} Fuzz'
+    # runs-on: ${{ matrix.builder }}            
     uses: status-im/nimbus-common-workflow/.github/workflows/common.yml@main
     with:
       test-command: |
