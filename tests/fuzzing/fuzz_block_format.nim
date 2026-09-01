@@ -21,7 +21,7 @@ proc cppDecode(payload: openArray[byte]): Opt[seq[byte]] =
   if cppDecompressedLen > MaxLen.csize_t:
     return err()
 
-  var cppDecompressed = newSeq[byte](cppDecompressedLen)
+  var cppDecompressed = newSeqUninit[byte](cppDecompressedLen)
   if cppDecompressedLen > 0 and snappy_uncompress(
       cast[cstring](baseAddr payload), payload.len.csize_t,
       cast[ptr cchar](baseAddr cppDecompressed), cppDecompressedLen) != 0:
