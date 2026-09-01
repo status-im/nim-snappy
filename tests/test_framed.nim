@@ -217,3 +217,11 @@ suite "framing":
 
     checkInvalidFramed(framed, data.len)
     checkInvalidFramed(framedCompressed, data.len)
+
+  test "long padding chunk":
+    let
+      framed =
+        @framingHeader &
+        @[byte 0xfe, 0x00, 0x00, 0x02] & newSeq[byte](128 * 1024)
+
+    checkValidFramed(framed, @[])
