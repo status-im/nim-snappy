@@ -52,13 +52,15 @@ func decodeAllTags*(
         continue
 
       if length >= 61:
-        let lenlen = length - 60 # 1-4
-        if (input.len - ip) < lenlen:
+        let
+          lenlen = length - 60 # 1-4
+          remainingInBytes = input.len - ip
+        if remainingInBytes < lenlen:
           return err(CodecError.invalidInput)
 
         # Length is actually in the little-endian bytes that follow
         let len32 =
-          if (input.len - ip) >= 4:
+          if remainingInBytes >= 4:
             # Decode 4 bytes then mask the excess (to avoid branching)
             const mask = [
               0'u32, 0xff'u32, 0xffff'u32, 0xffffff'u32, 0xffffffff'u32]
