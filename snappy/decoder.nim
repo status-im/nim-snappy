@@ -64,8 +64,8 @@ func decodeAllTags*(
               0'u32, 0xff'u32, 0xffff'u32, 0xffffff'u32, 0xffffffff'u32]
             (load32(input, ip) and mask[lenlen]) + 1
           else:
-            var v: uint32
-            for i in 0 ..< lenlen:
+            var v = input[ip].uint32
+            for i in 1 ..< lenlen:
               v = v or (input[ip + i].uint32 shl (8 * i))
             v + 1
 
