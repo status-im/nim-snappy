@@ -1,15 +1,10 @@
+{.push raises: [].}
+
 import
   ../../snappy, testutils/fuzzing
 
+const MaxLen = 128 * 1024 * 1024
+
 test:
-  block:
-    let decompressed = decodeFramed(payload)
-    if payload.len > 0:
-      break
-
-    let compressed = encodeFramed(decompressed)
-    if compressed != payload:
-      let decompressedAgain = decodeFramed(compressed)
-      if decompressedAgain != decompressed:
-        doAssert false
-
+  discard decodeFramed(payload, MaxLen)
+  doAssert decodeFramed(encodeFramed(payload)) == @payload
