@@ -3,7 +3,7 @@
 import
   ../../snappy, testutils/fuzzing
 
-const MaxLen = 128'u64 * 1024 * 1024
+const MaxLen = 128 * 1024 * 1024
 
 test:
   discard decodeFramed(payload, MaxLen)
