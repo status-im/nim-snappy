@@ -145,7 +145,7 @@ proc uncompressFramed*(
       if dataLen != framingHeader.len - 4:
         raise newException(MalformedSnappyData, "Invalid extra header length")
 
-      if input.read(dataLen) != framingHeader[4 .. framingHeader.high]:
+      if input.read(dataLen) != framingHeader.toOpenArray(4, framingHeader.high):
         raise newException(MalformedSnappyData, "Invalid extra header value")
 
     else:
