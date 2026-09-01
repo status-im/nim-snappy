@@ -220,6 +220,15 @@ suite "snappy":
 
     badData "\x11\x00\x00\xfc\xff\xff\xff\xff"
 
+  test "non-minimal literal length":
+    for data in [
+        "\x05\xF0\x04Hello",
+        "\x05\xF4\x04\x00Hello",
+        "\x05\xF8\x04\x00\x00Hello",
+        "\x05\xFC\x04\x00\x00\x00Hello",
+        "\x05\x10Hello"]:
+      check string.fromBytes(snappy.decode(data.toBytes)) == "Hello"
+
   test "random data":
     # Selected random inputs pulled from quickcheck failure witnesses.
     let random1 = [0'u8, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 1, 1,
