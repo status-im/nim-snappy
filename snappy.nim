@@ -183,14 +183,17 @@ func uncompressFramed*(
   ## and a new output buffer.
   ##
   ## In case of errors, `output` may be partially overwritten with invalid data.
+  template validateFramingHeader(data: openArray[byte]) =
+    if data.len < framingHeader.len:
+      return err(FrameError.invalidInput)
+
+    if data.toOpenArray(0, framingHeader.len - 1) != framingHeader:
+      return err(FrameError.invalidInput)
+
   var
     read =
       if checkHeader:
-        if input.len < framingHeader.len:
-          return err(FrameError.invalidInput)
-
-        if input.toOpenArray(0, framingHeader.len - 1) != framingHeader:
-          return err(FrameError.invalidInput)
+        input.validateFramingHeader()
         framingHeader.len
       else:
         0
@@ -260,8 +263,16 @@ func uncompressFramed*(
     elif id < 0x80:
       return err(FrameError.unknownChunk) # Reserved unskippable chunk
 
+    elif id == chunkStream:
+      # The stream identifier chunk can come multiple times in the stream
+      # besides the first; if such a chunk shows up, it should simply be
+      # ignored, assuming it has the right length and contents. This allows for
+      # easy concatenation of compressed files without the need for re-framing.
+      # https://github.com/google/snappy/blob/main/framing_format.txt#L76-L79
+      input.toOpenArray(read - 4, input.high).validateFramingHeader()
+
     else:
-      discard # Reserved skippable chunk (for example framing format header)
+      discard # Reserved skippable chunk
 
     read += dataLen
 
