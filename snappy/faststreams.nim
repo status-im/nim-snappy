@@ -99,15 +99,16 @@ proc uncompressFramed*(
   while input.readable(4):
     let (id, dataLen) = decodeFrameHeader(input.read(4))
 
-    if dataLen.uint64 > maxCompressedFrameDataLen:
-      raise newException(MalformedSnappyData, "Invalid frame length: " & $dataLen)
-
     if not input.readable(dataLen):
       raise newException(UnexpectedEofError, "Failed to read the entire snappy frame")
 
     if id == chunkCompressed:
       if dataLen < 4:
         raise newException(MalformedSnappyData, "Frame size too low to contain CRC checksum")
+
+      if dataLen.uint64 > maxCompressedFrameDataLen:
+        raise newException(
+          MalformedSnappyData, "Invalid frame length: " & $dataLen)
 
       let
         crc = uint32.fromBytesLE input.read(4)
