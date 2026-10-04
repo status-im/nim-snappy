@@ -3,7 +3,7 @@ import
   ../../snappy
 
 let
-  fuzzingDir = getAppDir()
+  fuzzingDir = currentSourcePath.parentDir
   dataDir = fuzzingDir / ".." / "data"
 
   corpusDir = fuzzingDir / "corpus"
