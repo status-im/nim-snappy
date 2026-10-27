@@ -42,13 +42,13 @@ task test, "Run all tests":
   for threads in ["--threads:off", "--threads:on"]:
     for args in testArguments:
       run threads & " " & args & " --mm:refc", "tests/all_tests"
-      if (NimMajor, NimMinor) > (1, 6):
+      if (NimMajor, NimMinor) >= (2, 0):
         run threads & " " & args & " --mm:orc", "tests/all_tests"
 
   build "-d:release", "tests/benchmark" # don't run
 
 task test_asan, "Run all tests with ASAN":
-  if platform != "x86" and (NimMajor, NimMinor) > (1, 6):
+  if platform != "x86" and (NimMajor, NimMinor) >= (2, 0):
     # https://clang.llvm.org/docs/AddressSanitizer.html
     putEnv("ASAN_OPTIONS", "detect_leaks=0:detect_stack_use_after_return=1")
     # https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
