@@ -140,7 +140,7 @@ func decodeAllTags*(
         len = length
 
       while pos - src < 8:
-        copyMem(addr output[pos], addr output[src], 8)
+        moveMem(addr output[pos], addr output[src], 8)
         len -= pos - src
         pos += pos - src
 
