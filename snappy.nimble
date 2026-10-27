@@ -7,7 +7,7 @@ description   = "Nim implementation of snappy compression algorithm"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 1.6.0",
+requires "nim >= 1.6.0",  # < 2.0.6 has known ASAN use-after-free and UB issues
          "faststreams >= 0.3.0",
          "unittest2 >= 0.0.2",
          "results >= 0.4.0",
@@ -48,7 +48,7 @@ task test, "Run all tests":
   build "-d:release", "tests/benchmark" # don't run
 
 task test_asan, "Run all tests with ASAN":
-  if platform != "x86":
+  if platform != "x86" and (NimMajor, NimMinor) > (1, 6):
     # https://clang.llvm.org/docs/AddressSanitizer.html
     putEnv("ASAN_OPTIONS", "detect_leaks=0:detect_stack_use_after_return=1")
     # https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
